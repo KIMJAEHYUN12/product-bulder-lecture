@@ -20,14 +20,14 @@ import type { AnalysisMode } from "@/types";
 
 export default function Home() {
   const [mode, setMode] = useState<AnalysisMode>("kim");
+  const { state, loadImage, startRoast, reset, clearResult } = useRoastFlow();
+  const { fearGreed, news, econCalendar, commodities, kimComment, isLoading: marketLoading } = useMarketData();
 
   const switchMode = (newMode: AnalysisMode) => {
     if (newMode === mode) return;
     setMode(newMode);
-    reset(); // 모드 전환 시 이전 결과 초기화
+    clearResult(); // 이미지 유지, 결과만 초기화
   };
-  const { state, loadImage, startRoast, reset } = useRoastFlow();
-  const { fearGreed, news, econCalendar, commodities, kimComment, isLoading: marketLoading } = useMarketData();
   const {
     previewUrl,
     isLoading,

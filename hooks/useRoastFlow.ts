@@ -107,5 +107,20 @@ export function useRoastFlow() {
     setState(initialState);
   }, []);
 
-  return { state, loadImage, startRoast, reset };
+  // 이미지는 유지하고 분석 결과만 초기화 (모드 전환 시 사용)
+  const clearResult = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      isLoading: false,
+      roast: null,
+      analysis: null,
+      scores: null,
+      sector: null,
+      error: null,
+      grade: null,
+      kimExpression: "neutral",
+    }));
+  }, []);
+
+  return { state, loadImage, startRoast, reset, clearResult };
 }
