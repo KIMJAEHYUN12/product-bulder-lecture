@@ -11,23 +11,23 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { Sector } from "@/types";
-import type { FearGreedData, EconEvent, CommodityItem } from "@/hooks/useMarketData";
+import type { FearGreedData, EconEvent, CommodityItem, NewsItem } from "@/hooks/useMarketData";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
-const NEWS_ITEMS = [
-  "🔴 삼성전자 HBM4 엔비디아 퀄 테스트 진행 중 · 3Q26 공급 가시화",
-  "⚡ 효성중공업 미국 변압기 수주잔고 3.2조 돌파 · 신규 팩토리 증설 확정",
-  "🧬 삼성바이오로직스 5공장 가동률 40%→65% 상향 조정",
-  "🚗 현대차 울산 EV 전용라인 3조 투자 확정 · 2027년 양산",
-  "💾 SK하이닉스 HBM3E 16단 GB200 NVL72 공급 단가 타결",
-  "🔋 LG에너지솔루션 오하이오 2공장 가동률 50% 하향 · GM 발주 감소",
-  "🧠 네이버 하이퍼클로바X B2B 계약 23건 신규 수주 · 공공 부문 확대",
-  "⚙️ 현대모비스 자율주행 레벨3 센서퓨전 모듈 독점 납품 확정",
-  "🔋 포스코퓨처엠 양극재 수주잔고 8.7조 · 2026 가이던스 유지",
-  "🔌 두산에너빌리티 체코 원전 수주 최종 협상 진입 · 수주액 24조 추정",
-  "💊 셀트리온 자가면역 바이오시밀러 미국 FDA 승인 · 연 매출 5,000억 전망",
-  "🔧 LS일렉트릭 미국 데이터센터향 배전반 수주 급증 · 북미 법인 증설",
+const NEWS_ITEMS: NewsItem[] = [
+  { title: "🔴 삼성전자 HBM4 엔비디아 퀄 테스트 진행 중 · 3Q26 공급 가시화", url: "" },
+  { title: "⚡ 효성중공업 미국 변압기 수주잔고 3.2조 돌파 · 신규 팩토리 증설 확정", url: "" },
+  { title: "🧬 삼성바이오로직스 5공장 가동률 40%→65% 상향 조정", url: "" },
+  { title: "🚗 현대차 울산 EV 전용라인 3조 투자 확정 · 2027년 양산", url: "" },
+  { title: "💾 SK하이닉스 HBM3E 16단 GB200 NVL72 공급 단가 타결", url: "" },
+  { title: "🔋 LG에너지솔루션 오하이오 2공장 가동률 50% 하향 · GM 발주 감소", url: "" },
+  { title: "🧠 네이버 하이퍼클로바X B2B 계약 23건 신규 수주 · 공공 부문 확대", url: "" },
+  { title: "⚙️ 현대모비스 자율주행 레벨3 센서퓨전 모듈 독점 납품 확정", url: "" },
+  { title: "🔋 포스코퓨처엠 양극재 수주잔고 8.7조 · 2026 가이던스 유지", url: "" },
+  { title: "🔌 두산에너빌리티 체코 원전 수주 최종 협상 진입 · 수주액 24조 추정", url: "" },
+  { title: "💊 셀트리온 자가면역 바이오시밀러 미국 FDA 승인 · 연 매출 5,000억 전망", url: "" },
+  { title: "🔧 LS일렉트릭 미국 데이터센터향 배전반 수주 급증 · 북미 법인 증설", url: "" },
 ];
 
 function calcFearGreed(): number {
@@ -147,8 +147,9 @@ const DAILY_QUOTES = [
 // ─── Components ──────────────────────────────────────────────────────────────
 
 /** 상단 뉴스 롤링 티커 */
-export function NewsTicker({ news, isLoading }: { news?: string[]; isLoading?: boolean }) {
-  const items = news && news.length > 0 ? news : NEWS_ITEMS;
+export function NewsTicker({ news, isLoading }: { news?: NewsItem[]; isLoading?: boolean }) {
+  const isLive = !!(news && news.length > 0);
+  const items = isLive ? news! : NEWS_ITEMS;
   const displayItems = [...items, ...items]; // seamless loop
 
   return (
@@ -157,19 +158,31 @@ export function NewsTicker({ news, isLoading }: { news?: string[]; isLoading?: b
         <span className={`text-xs font-bold shrink-0 border px-2 py-0.5 rounded font-mono transition-colors ${
           isLoading
             ? "text-gray-500 border-gray-700"
-            : news && news.length > 0
+            : isLive
             ? "text-green-400 border-green-500/50"
             : "text-red-400 border-red-500/50"
         }`}>
-          {isLoading ? "..." : news && news.length > 0 ? "LIVE" : "DEMO"}
+          {isLoading ? "..." : isLive ? "LIVE" : "DEMO"}
         </span>
         <div className="overflow-hidden flex-1">
           <div className="animate-ticker">
-            {displayItems.map((item, i) => (
-              <span key={i} className="text-sm text-gray-300 shrink-0 mr-10">
-                {item}
-              </span>
-            ))}
+            {displayItems.map((item, i) =>
+              isLive && item.url ? (
+                <a
+                  key={i}
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-gray-300 shrink-0 mr-10 hover:text-white hover:underline underline-offset-2 transition-colors cursor-pointer"
+                >
+                  {item.title}
+                </a>
+              ) : (
+                <span key={i} className="text-sm text-gray-300 shrink-0 mr-10">
+                  {item.title}
+                </span>
+              )
+            )}
           </div>
         </div>
       </div>

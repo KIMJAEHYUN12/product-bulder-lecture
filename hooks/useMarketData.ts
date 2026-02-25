@@ -23,9 +23,14 @@ export interface CommodityItem {
   note: string;
 }
 
+export interface NewsItem {
+  title: string;
+  url: string;
+}
+
 export interface MarketData {
   fearGreed: FearGreedData | null;
-  news: string[];
+  news: NewsItem[];
   econCalendar: EconEvent[];
   commodities: CommodityItem[];
   kimComment: string;
@@ -38,7 +43,7 @@ const MARKET_URL =
 
 export function useMarketData(): MarketData {
   const [fearGreed, setFearGreed] = useState<FearGreedData | null>(null);
-  const [news, setNews] = useState<string[]>([]);
+  const [news, setNews] = useState<NewsItem[]>([]);
   const [econCalendar, setEconCalendar] = useState<EconEvent[]>([]);
   const [commodities, setCommodities] = useState<CommodityItem[]>([]);
   const [kimComment, setKimComment] = useState("");

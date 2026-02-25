@@ -91,6 +91,10 @@ function parseRssItems(xml, maxItems) {
     const titleMatch = itemXml.match(
       /<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/
     );
+    // link 또는 guid에서 URL 추출
+    const linkMatch =
+      itemXml.match(/<link>(?:<!\[CDATA\[)?\s*(https?:\/\/[^\s<]+)\s*(?:\]\]>)?<\/link>/) ||
+      itemXml.match(/<guid[^>]*>(?:<!\[CDATA\[)?\s*(https?:\/\/[^\s<]+)\s*(?:\]\]>)?<\/guid>/);
     if (titleMatch) {
       const title = titleMatch[1]
         .trim()
@@ -98,7 +102,8 @@ function parseRssItems(xml, maxItems) {
         .replace(/&lt;/g, "<")
         .replace(/&gt;/g, ">")
         .replace(/&#39;/g, "'");
-      if (title && title.length > 5) items.push(title);
+      const url = linkMatch ? linkMatch[1].trim() : "";
+      if (title && title.length > 5) items.push({ title, url });
     }
   }
   return items;
