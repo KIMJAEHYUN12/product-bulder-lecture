@@ -242,9 +242,12 @@ export function MarketSentimentGauge({ fearGreed }: { fearGreed?: FearGreedData 
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           <AlertTriangle size={13} className="text-gray-400" />
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-            시장 공포/탐욕
-          </p>
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+              시장 공포/탐욕
+            </p>
+            <p className="text-[10px] text-gray-600 font-mono">가상화폐 시장 심리 지수</p>
+          </div>
         </div>
         <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${
           isReal
