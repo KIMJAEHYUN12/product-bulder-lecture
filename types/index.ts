@@ -20,9 +20,12 @@ export interface PortfolioScores {
   risk_management: number;
 }
 
+export type AnalysisMode = "kim" | "makalong";
+
 export interface AnalyzeRequest {
   imageBase64: string;
   mimeType: string;
+  mode?: AnalysisMode;
 }
 
 export interface AnalyzeResponse {

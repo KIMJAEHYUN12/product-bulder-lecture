@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { FileDropZone } from "@/components/FileDropZone";
 import { RoastButton } from "@/components/RoastButton";
@@ -15,8 +16,10 @@ import {
 } from "@/components/DashboardWidgets";
 import { useRoastFlow } from "@/hooks/useRoastFlow";
 import { useMarketData } from "@/hooks/useMarketData";
+import type { AnalysisMode } from "@/types";
 
 export default function Home() {
+  const [mode, setMode] = useState<AnalysisMode>("kim");
   const { state, loadImage, startRoast, reset } = useRoastFlow();
   const { fearGreed, news, econCalendar, commodities, kimComment, isLoading: marketLoading } = useMarketData();
   const {
@@ -44,14 +47,42 @@ export default function Home() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-black text-white leading-tight">
-              독설가 킴의{" "}
-              <span className="text-kim-red">팩폭 주식 상담소</span>
+              {mode === "kim" ? (
+                <>독설가 킴의{" "}<span className="text-kim-red">팩폭 주식 상담소</span></>
+              ) : (
+                <>마카롱의{" "}<span className="text-blue-400">투자 전략 리포트</span></>
+              )}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5 font-mono">
-              6대 산업 전문가 대시보드 · 38세 현장직 베테랑 AI
+              {mode === "kim"
+                ? "6대 산업 전문가 대시보드 · 38세 현장직 베테랑 AI"
+                : "20년 경력 · 수급·차트·밸류에이션 3축 분석"}
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* 모드 토글 */}
+            <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10">
+              <button
+                onClick={() => setMode("kim")}
+                className={`text-xs font-mono px-3 py-1.5 rounded-md transition-all ${
+                  mode === "kim"
+                    ? "bg-kim-red text-white shadow"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                킴
+              </button>
+              <button
+                onClick={() => setMode("makalong")}
+                className={`text-xs font-mono px-3 py-1.5 rounded-md transition-all ${
+                  mode === "makalong"
+                    ? "bg-blue-500 text-white shadow"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                마카롱
+              </button>
+            </div>
             <KimCharacter expression={kimExpression} isLoading={isLoading} />
             <ThemeToggle />
           </div>
@@ -68,7 +99,6 @@ export default function Home() {
 
           {/* ── CENTER ── */}
           <div className="lg:col-span-2 flex flex-col gap-4">
-            {/* Show quote before image is loaded */}
             {!hasImage && <DailyQuote />}
 
             <FileDropZone previewUrl={previewUrl} onFile={loadImage} />
@@ -77,7 +107,7 @@ export default function Home() {
               disabled={!hasImage}
               isLoading={isLoading}
               hasResult={hasResult}
-              onClick={startRoast}
+              onClick={() => startRoast(mode)}
             />
 
             {hasResult && !isLoading && (
@@ -91,7 +121,7 @@ export default function Home() {
               </div>
             )}
 
-            <RoastResult roast={roast} error={error} grade={grade} />
+            <RoastResult roast={roast} error={error} grade={grade} mode={mode} />
           </div>
 
           {/* ── RIGHT ── */}

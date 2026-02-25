@@ -5,19 +5,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import { StockGradeCard } from "./StockGradeCard";
 import type { Grade } from "@/types";
 
+import type { AnalysisMode } from "@/types";
+
 interface Props {
   roast: string | null;
   error: string | null;
   grade: Grade;
+  mode?: AnalysisMode;
 }
 
-const RECEIPT_LINES = [
-  "================================",
-  "     독설가 킴의 팩폭 영수증      ",
-  "================================",
-];
-
-export function RoastResult({ roast, error, grade }: Props) {
+export function RoastResult({ roast, error, grade, mode = "kim" }: Props) {
+  const headerLines = mode === "makalong"
+    ? ["================================", "   마카롱의 투자 전략 리포트   ", "================================"]
+    : ["================================", "     독설가 킴의 팩폭 영수증      ", "================================"];
   const [displayed, setDisplayed] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -64,7 +64,7 @@ export function RoastResult({ roast, error, grade }: Props) {
           {/* Receipt header */}
           <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
             <pre className="text-xs font-mono text-gray-500 dark:text-gray-400 text-center leading-tight">
-              {RECEIPT_LINES.join("\n")}
+              {headerLines.join("\n")}
             </pre>
           </div>
 

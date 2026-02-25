@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import type { RoastState, Grade, KimExpression } from "@/types";
+import type { RoastState, Grade, KimExpression, AnalysisMode } from "@/types";
 import { analyzePortfolio } from "@/lib/analyzeApi";
 
 function deriveExpression(grade: Grade): KimExpression {
@@ -62,7 +62,7 @@ export function useRoastFlow() {
     reader.readAsDataURL(file);
   }, []);
 
-  const startRoast = useCallback(async () => {
+  const startRoast = useCallback(async (mode: AnalysisMode = "kim") => {
     const { imageBase64, mimeType } = stateRef.current;
     if (!imageBase64 || !mimeType) return;
 
@@ -78,7 +78,7 @@ export function useRoastFlow() {
     }));
 
     try {
-      const data = await analyzePortfolio({ imageBase64, mimeType });
+      const data = await analyzePortfolio({ imageBase64, mimeType, mode });
       const kimExpression = deriveExpression(data.grade);
       setState((prev) => ({
         ...prev,

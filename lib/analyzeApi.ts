@@ -10,7 +10,7 @@ export async function analyzePortfolio(
   const response = await fetch(API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
+    body: JSON.stringify({ ...req, mode: req.mode ?? "kim" }),
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
