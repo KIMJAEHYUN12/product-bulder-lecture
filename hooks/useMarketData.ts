@@ -15,7 +15,7 @@ export interface MarketData {
 
 const MARKET_URL =
   process.env.NEXT_PUBLIC_MARKET_API_URL ||
-  "https://us-central1-mylen-24263782-5d205.cloudfunctions.net/market";
+  "https://market-cryqnhf6fq-uc.a.run.app";
 
 export function useMarketData(): MarketData {
   const [fearGreed, setFearGreed] = useState<FearGreedData | null>(null);

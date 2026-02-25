@@ -5,7 +5,7 @@ export async function analyzePortfolio(
 ): Promise<AnalyzeResponse> {
   const API_URL =
     process.env.NEXT_PUBLIC_API_URL ||
-    "https://us-central1-mylen-24263782-5d205.cloudfunctions.net/analyze";
+    "https://analyze-cryqnhf6fq-uc.a.run.app";
 
   const response = await fetch(API_URL, {
     method: "POST",
