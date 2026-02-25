@@ -1,14 +1,47 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hello World</title>
+  <title>독설가 킴의 팩폭 주식 상담소</title>
   <link href='/style.css' rel='stylesheet'>
 </head>
 <body>
-  <h1>Hello, world!</h1>
-  <button onclick="console.log('hello');">Press me</button>
-  <script defer type="text/javascript" src="/main.js"></script>
+  <div class="container">
+    <header>
+      <h1>독설가 킴의 팩폭 주식 상담소</h1>
+      <p class="subtitle">포트폴리오 올려봐요. 뼈 때려드릴게요.</p>
+    </header>
+
+    <div class="card api-card">
+      <label for="apiKey">Gemini API 키</label>
+      <div class="api-input-row">
+        <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off" />
+        <button id="saveApiKey">저장</button>
+      </div>
+      <span id="apiStatus"></span>
+    </div>
+
+    <div class="card upload-card" id="dropZone">
+      <input type="file" id="fileInput" accept="image/*" hidden />
+      <div class="drop-content" id="dropContent">
+        <div class="upload-icon">📊</div>
+        <p>포트폴리오 스크린샷을 여기에 드래그하거나</p>
+        <button class="upload-btn" id="uploadBtn">파일 선택</button>
+      </div>
+      <img id="preview" class="preview-img" hidden />
+    </div>
+
+    <button class="roast-btn" id="roastBtn" disabled>팩폭 시작</button>
+
+    <div class="card result-card" id="resultCard" hidden>
+      <div class="result-header">
+        <span class="result-badge">독설가 킴의 한마디</span>
+      </div>
+      <div id="resultText" class="result-text"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
 </body>
 </html>
