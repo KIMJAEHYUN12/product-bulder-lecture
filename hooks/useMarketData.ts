@@ -14,10 +14,21 @@ export interface EconEvent {
   hot: boolean;
 }
 
+export interface CommodityItem {
+  key: string;
+  name: string;
+  price: number;
+  changePct: number;
+  currency: string;
+  note: string;
+}
+
 export interface MarketData {
   fearGreed: FearGreedData | null;
   news: string[];
   econCalendar: EconEvent[];
+  commodities: CommodityItem[];
+  kimComment: string;
   isLoading: boolean;
 }
 
@@ -29,6 +40,8 @@ export function useMarketData(): MarketData {
   const [fearGreed, setFearGreed] = useState<FearGreedData | null>(null);
   const [news, setNews] = useState<string[]>([]);
   const [econCalendar, setEconCalendar] = useState<EconEvent[]>([]);
+  const [commodities, setCommodities] = useState<CommodityItem[]>([]);
+  const [kimComment, setKimComment] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -38,10 +51,12 @@ export function useMarketData(): MarketData {
         if (d.fearGreed) setFearGreed(d.fearGreed);
         if (d.news?.length > 0) setNews(d.news);
         if (d.econCalendar?.length > 0) setEconCalendar(d.econCalendar);
+        if (d.commodities?.length > 0) setCommodities(d.commodities);
+        if (d.kimComment) setKimComment(d.kimComment);
       })
       .catch((err) => console.warn("Market data fetch failed:", err))
       .finally(() => setIsLoading(false));
   }, []);
 
-  return { fearGreed, news, econCalendar, isLoading };
+  return { fearGreed, news, econCalendar, commodities, kimComment, isLoading };
 }
