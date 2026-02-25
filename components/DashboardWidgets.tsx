@@ -11,7 +11,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { Sector } from "@/types";
-import type { FearGreedData, EconEvent } from "@/hooks/useMarketData";
+import type { FearGreedData, EconEvent, CommodityItem } from "@/hooks/useMarketData";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -52,14 +52,7 @@ function fgInfo(v: number): FGInfo {
   return { label: "극단적 탐욕", color: "#10b981", emoji: "🤑" };
 }
 
-const ECON_EVENTS = [
-  { date: "02/26", event: "FOMC 의사록 공개", tag: "미국", hot: true },
-  { date: "02/28", event: "한국 2월 산업생산", tag: "한국", hot: false },
-  { date: "03/05", event: "삼성전자 IR Day", tag: "실적", hot: true },
-  { date: "03/12", event: "미국 CPI 발표", tag: "물가", hot: true },
-  { date: "03/19", event: "FOMC 정례회의", tag: "금리", hot: true },
-  { date: "03/25", event: "SK하이닉스 1Q 가이던스", tag: "실적", hot: false },
-];
+// 더미 제거 — 실제 일정은 서버(functions/index.js)에서 BOK·Fed·통계청 공식 기준으로 반환
 
 const INDUSTRY_CHECKLISTS: Record<string, string[]> = {
   이차전지: [
@@ -288,21 +281,21 @@ export function MarketSentimentGauge({ fearGreed }: { fearGreed?: FearGreedData 
   );
 }
 
-/** 현장직 업종별 체크리스트 */
-export function IndustryChecklist({ sector }: { sector: Sector | null }) {
-  const [active, setActive] = useState<string>(sector || "이차전지");
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    if (sector) {
-      setActive(sector);
-      setChecked({});
-    }
-  }, [sector]);
-
-  const items = INDUSTRY_CHECKLISTS[active] ?? INDUSTRY_CHECKLISTS["기타"];
-  const sectors = Object.keys(INDUSTRY_CHECKLISTS);
-  const checkedCount = Object.values(checked).filter(Boolean).length;
+/** 핵심 원재료 시세 위젯 */
+export function CommodityTicker({
+  commodities,
+  kimComment,
+  isLoading,
+}: {
+  commodities?: CommodityItem[];
+  kimComment?: string;
+  isLoading?: boolean;
+}) {
+  const formatPrice = (price: number, currency: string) => {
+    if (price >= 10000) return `${(price / 1000).toFixed(1)}K`;
+    if (price >= 1000) return price.toFixed(0);
+    return price.toFixed(2);
+  };
 
   return (
     <div className="glass-card p-4">
@@ -310,72 +303,86 @@ export function IndustryChecklist({ sector }: { sector: Sector | null }) {
         <div className="flex items-center gap-1.5">
           <TrendingUp size={13} className="text-gray-400" />
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-            현장직 체크리스트
+            핵심 원재료 시세
           </p>
         </div>
-        <span className="text-xs font-mono text-gray-500">
-          {checkedCount}/{items.length}
+        <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${
+          commodities && commodities.length > 0
+            ? "text-green-400 border-green-500/30 bg-green-500/5"
+            : "text-gray-600 border-gray-700"
+        }`}>
+          {isLoading ? "로딩..." : commodities?.length ? "Yahoo Finance" : "데이터 없음"}
         </span>
       </div>
 
-      {/* Sector selector */}
-      <div className="flex flex-wrap gap-1 mb-3">
-        {sectors.map((s) => (
-          <button
-            key={s}
-            onClick={() => {
-              setActive(s);
-              setChecked({});
-            }}
-            className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-              active === s
-                ? "border-kim-gold/60 bg-kim-gold/10 text-kim-gold"
-                : "border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20"
-            }`}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-
-      {/* Items */}
-      <div className="space-y-1.5">
-        {items.map((item, i) => (
-          <button
-            key={`${active}-${i}`}
-            onClick={() =>
-              setChecked((prev) => ({ ...prev, [i]: !prev[i] }))
-            }
-            className="w-full flex items-center gap-2 text-left group"
-          >
-            {checked[i] ? (
-              <CheckCircle2 size={13} className="text-green-400 shrink-0" />
-            ) : (
-              <Circle
-                size={13}
-                className="text-gray-600 shrink-0 group-hover:text-gray-400 transition-colors"
-              />
-            )}
-            <span
-              className={`text-xs transition-colors ${
-                checked[i]
-                  ? "text-gray-600 line-through"
-                  : "text-gray-300 group-hover:text-white"
+      {/* Price grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          {[0,1,2,3].map(i => (
+            <div key={i} className="rounded-lg p-2.5 border border-white/5 bg-white/[0.02] animate-pulse h-16" />
+          ))}
+        </div>
+      ) : commodities && commodities.length > 0 ? (
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          {commodities.map((c) => (
+            <motion.div
+              key={c.key}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className={`rounded-lg p-2.5 border ${
+                c.changePct > 0
+                  ? "border-red-500/30 bg-red-950/20"
+                  : c.changePct < 0
+                  ? "border-blue-500/30 bg-blue-950/20"
+                  : "border-white/10 bg-white/[0.02]"
               }`}
             >
-              {item}
-            </span>
-          </button>
-        ))}
-      </div>
+              <p className="text-[10px] text-gray-500 mb-0.5">{c.name}</p>
+              <p className="text-sm font-bold text-white font-mono">
+                {formatPrice(c.price, c.currency)}
+                <span className="text-[9px] text-gray-600 ml-0.5">{c.currency}</span>
+              </p>
+              <p className={`text-xs font-mono font-bold ${
+                c.changePct > 0 ? "text-red-400" : c.changePct < 0 ? "text-blue-400" : "text-gray-500"
+              }`}>
+                {c.changePct > 0 ? "▲" : c.changePct < 0 ? "▼" : "–"}
+                {" "}{Math.abs(c.changePct).toFixed(2)}%
+              </p>
+              <p className="text-[9px] text-gray-700 mt-0.5">{c.note}</p>
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-gray-600 text-center py-4">시세 로드 실패</p>
+      )}
+
+      {/* 공장장 킴의 원가 분석 */}
+      {kimComment && !isLoading && (
+        <div className="border-t border-white/10 pt-3">
+          <p className="text-[10px] text-kim-gold font-mono mb-1.5">
+            ⚙️ 공장장 킴의 원가 분석
+          </p>
+          <p className="text-xs text-gray-300 leading-relaxed">{kimComment}</p>
+        </div>
+      )}
     </div>
   );
 }
 
 /** 하단 주요 경제 일정 */
 export function EconomicCalendar({ events }: { events?: EconEvent[] }) {
-  const displayEvents = events && events.length > 0 ? events : ECON_EVENTS;
-  const isReal = !!(events && events.length > 0);
+  const hasEvents = !!(events && events.length > 0);
+
+  // 태그별 색상
+  const tagStyle = (tag: string) => {
+    if (tag === "금통위") return "bg-blue-500/15 text-blue-400";
+    if (tag === "FOMC")  return "bg-purple-500/15 text-purple-400";
+    if (tag === "실적")  return "bg-yellow-500/15 text-yellow-400";
+    if (tag === "GDP")   return "bg-green-500/15 text-green-400";
+    if (tag === "물가")  return "bg-orange-500/15 text-orange-400";
+    if (tag === "무역")  return "bg-cyan-500/15 text-cyan-400";
+    return "bg-white/5 text-gray-500";
+  };
 
   return (
     <div className="glass-card p-4">
@@ -387,42 +394,43 @@ export function EconomicCalendar({ events }: { events?: EconEvent[] }) {
           </p>
         </div>
         <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${
-          isReal
+          hasEvents
             ? "text-green-400 border-green-500/30 bg-green-500/5"
             : "text-gray-600 border-gray-700"
         }`}>
-          {isReal ? "Finnhub 실시간" : "예정 일정"}
+          {hasEvents ? "KR 공식 일정 · BOK·Fed" : "로드 중"}
         </span>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-        {displayEvents.map((ev, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.06 }}
-            className={`rounded-lg p-2.5 border ${
-              ev.hot
-                ? "border-red-500/30 bg-red-950/20"
-                : "border-white/5 bg-white/[0.02]"
-            }`}
-          >
-            <p className="text-xs font-mono text-gray-500 mb-1">{ev.date}</p>
-            <p className="text-xs text-white font-medium leading-tight mb-1.5">
-              {ev.event}
-            </p>
-            <span
-              className={`text-xs px-1.5 py-0.5 rounded-full font-mono ${
+
+      {hasEvents ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+          {events!.map((ev, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.06 }}
+              className={`rounded-lg p-2.5 border ${
                 ev.hot
-                  ? "bg-red-500/20 text-red-400"
-                  : "bg-white/5 text-gray-500"
+                  ? "border-red-500/30 bg-red-950/20"
+                  : "border-white/5 bg-white/[0.02]"
               }`}
             >
-              {ev.tag}
-            </span>
-          </motion.div>
-        ))}
-      </div>
+              <p className="text-xs font-mono text-gray-500 mb-1">{ev.date}</p>
+              <p className="text-xs text-white font-medium leading-tight mb-1.5">
+                {ev.event}
+              </p>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-mono ${tagStyle(ev.tag)}`}>
+                {ev.tag}
+              </span>
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-kim-gold font-mono text-center py-4 leading-relaxed">
+          💊 일정도 안 보고 매수 버튼 누르는 손가락이 문제다
+        </p>
+      )}
     </div>
   );
 }
