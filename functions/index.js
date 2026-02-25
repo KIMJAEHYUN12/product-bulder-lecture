@@ -3,6 +3,7 @@ const { defineSecret } = require("firebase-functions/params");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const finnhubApiKey = defineSecret("FINNHUB_API_KEY");
 
 exports.analyze = onRequest(
   { secrets: [geminiApiKey], cors: true },
@@ -105,14 +106,14 @@ function parseRssItems(xml, maxItems) {
 
 // ── 시장 데이터 엔드포인트 ─────────────────────────────────────────
 exports.market = onRequest(
-  { cors: true },
+  { cors: true, secrets: [finnhubApiKey] },
   async (req, res) => {
     if (req.method !== "GET") {
       res.status(405).send("Method Not Allowed");
       return;
     }
 
-    const result = { fearGreed: null, news: [] };
+    const result = { fearGreed: null, news: [], econCalendar: [] };
 
     // 1. 공포/탐욕 지수 (alternative.me — 무료, 키 없음)
     try {
@@ -152,6 +153,32 @@ exports.market = onRequest(
       } catch (err) {
         console.warn(`RSS 실패 (${url}):`, err.message);
       }
+    }
+
+    // 3. 경제 일정 (Finnhub — 무료 API)
+    try {
+      const today = new Date();
+      const from = today.toISOString().split("T")[0];
+      const to = new Date(today.getTime() + 35 * 24 * 60 * 60 * 1000)
+        .toISOString().split("T")[0];
+
+      const finnRes = await fetch(
+        `https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to}&token=${finnhubApiKey.value()}`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      const finnData = await finnRes.json();
+      const events = (finnData.economicCalendar || [])
+        .filter((e) => ["high", "medium"].includes(e.impact) && ["US", "KR", "CN"].includes(e.country))
+        .slice(0, 8)
+        .map((e) => ({
+          date: e.time?.slice(5) ?? "",   // MM-DD
+          event: e.event,
+          tag: e.country,
+          hot: e.impact === "high",
+        }));
+      if (events.length > 0) result.econCalendar = events;
+    } catch (err) {
+      console.warn("Finnhub API 실패:", err.message);
     }
 
     res.json(result);

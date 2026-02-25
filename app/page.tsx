@@ -18,7 +18,7 @@ import { useMarketData } from "@/hooks/useMarketData";
 
 export default function Home() {
   const { state, loadImage, startRoast, reset } = useRoastFlow();
-  const { fearGreed, news, isLoading: marketLoading } = useMarketData();
+  const { fearGreed, news, econCalendar, isLoading: marketLoading } = useMarketData();
   const {
     previewUrl,
     isLoading,
@@ -106,7 +106,7 @@ export default function Home() {
         </div>
 
         {/* ── Bottom: Economic Calendar ── */}
-        <EconomicCalendar />
+        <EconomicCalendar events={econCalendar} />
       </div>
     </main>
   );

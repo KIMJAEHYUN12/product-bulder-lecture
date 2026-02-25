@@ -11,7 +11,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { Sector } from "@/types";
-import type { FearGreedData } from "@/hooks/useMarketData";
+import type { FearGreedData, EconEvent } from "@/hooks/useMarketData";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -373,17 +373,29 @@ export function IndustryChecklist({ sector }: { sector: Sector | null }) {
 }
 
 /** 하단 주요 경제 일정 */
-export function EconomicCalendar() {
+export function EconomicCalendar({ events }: { events?: EconEvent[] }) {
+  const displayEvents = events && events.length > 0 ? events : ECON_EVENTS;
+  const isReal = !!(events && events.length > 0);
+
   return (
     <div className="glass-card p-4">
-      <div className="flex items-center gap-1.5 mb-4">
-        <Calendar size={13} className="text-gray-400" />
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-          주요 경제·실적 일정
-        </p>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-1.5">
+          <Calendar size={13} className="text-gray-400" />
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+            주요 경제·실적 일정
+          </p>
+        </div>
+        <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${
+          isReal
+            ? "text-green-400 border-green-500/30 bg-green-500/5"
+            : "text-gray-600 border-gray-700"
+        }`}>
+          {isReal ? "Finnhub 실시간" : "예정 일정"}
+        </span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-        {ECON_EVENTS.map((ev, i) => (
+        {displayEvents.map((ev, i) => (
           <motion.div
             key={i}
             initial={{ opacity: 0, y: 6 }}
