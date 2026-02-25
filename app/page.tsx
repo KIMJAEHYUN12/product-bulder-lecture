@@ -14,9 +14,11 @@ import {
   EconomicCalendar,
 } from "@/components/DashboardWidgets";
 import { useRoastFlow } from "@/hooks/useRoastFlow";
+import { useMarketData } from "@/hooks/useMarketData";
 
 export default function Home() {
   const { state, loadImage, startRoast, reset } = useRoastFlow();
+  const { fearGreed, news, isLoading: marketLoading } = useMarketData();
   const {
     previewUrl,
     isLoading,
@@ -35,7 +37,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-950 text-white grid-bg transition-colors">
       {/* ── News Ticker ── */}
-      <NewsTicker />
+      <NewsTicker news={news} isLoading={marketLoading} />
 
       <div className="max-w-[1400px] mx-auto px-4 py-6">
         {/* ── Header ── */}
@@ -60,7 +62,7 @@ export default function Home() {
 
           {/* ── LEFT SIDEBAR ── */}
           <div className="lg:col-span-1 flex flex-col gap-4">
-            <MarketSentimentGauge />
+            <MarketSentimentGauge fearGreed={fearGreed} />
             <IndustryChecklist sector={sector} />
           </div>
 

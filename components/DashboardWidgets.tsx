@@ -11,6 +11,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { Sector } from "@/types";
+import type { FearGreedData } from "@/hooks/useMarketData";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -153,16 +154,25 @@ const DAILY_QUOTES = [
 // ─── Components ──────────────────────────────────────────────────────────────
 
 /** 상단 뉴스 롤링 티커 */
-export function NewsTicker() {
+export function NewsTicker({ news, isLoading }: { news?: string[]; isLoading?: boolean }) {
+  const items = news && news.length > 0 ? news : NEWS_ITEMS;
+  const displayItems = [...items, ...items]; // seamless loop
+
   return (
     <div className="overflow-hidden bg-black/50 border-b border-white/10 py-2 px-4">
       <div className="flex items-center gap-3">
-        <span className="text-xs font-bold text-red-400 shrink-0 border border-red-500/50 px-2 py-0.5 rounded font-mono">
-          LIVE
+        <span className={`text-xs font-bold shrink-0 border px-2 py-0.5 rounded font-mono transition-colors ${
+          isLoading
+            ? "text-gray-500 border-gray-700"
+            : news && news.length > 0
+            ? "text-green-400 border-green-500/50"
+            : "text-red-400 border-red-500/50"
+        }`}>
+          {isLoading ? "..." : news && news.length > 0 ? "LIVE" : "DEMO"}
         </span>
         <div className="overflow-hidden flex-1">
           <div className="animate-ticker">
-            {[...NEWS_ITEMS, ...NEWS_ITEMS].map((item, i) => (
+            {displayItems.map((item, i) => (
               <span key={i} className="text-sm text-gray-300 shrink-0 mr-10">
                 {item}
               </span>
@@ -202,11 +212,24 @@ export function DailyQuote() {
   );
 }
 
+const FG_LABEL_KO: Record<string, string> = {
+  "Extreme Fear": "극단적 공포",
+  "Fear": "공포",
+  "Neutral": "중립",
+  "Greed": "탐욕",
+  "Extreme Greed": "극단적 탐욕",
+};
+
 /** 시장 공포/탐욕 게이지 */
-export function MarketSentimentGauge() {
+export function MarketSentimentGauge({ fearGreed }: { fearGreed?: FearGreedData | null }) {
+  // 실제 데이터 있으면 사용, 없으면 날짜 기반 의사난수 fallback
   const raw = useMemo(() => calcFearGreed(), []);
-  const value = Math.round(raw);
+  const value = fearGreed ? fearGreed.value : Math.round(raw);
+  const labelKo = fearGreed
+    ? (FG_LABEL_KO[fearGreed.label] ?? fearGreed.label)
+    : fgInfo(value).label;
   const info = fgInfo(value);
+  const isReal = !!fearGreed;
   const [animated, setAnimated] = useState(false);
 
   useEffect(() => {
@@ -216,11 +239,20 @@ export function MarketSentimentGauge() {
 
   return (
     <div className="glass-card p-4">
-      <div className="flex items-center gap-1.5 mb-3">
-        <AlertTriangle size={13} className="text-gray-400" />
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-          시장 공포/탐욕
-        </p>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-1.5">
+          <AlertTriangle size={13} className="text-gray-400" />
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+            시장 공포/탐욕
+          </p>
+        </div>
+        <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${
+          isReal
+            ? "text-green-400 border-green-500/30 bg-green-500/5"
+            : "text-gray-600 border-gray-700"
+        }`}>
+          {isReal ? "실시간" : "추정치"}
+        </span>
       </div>
 
       {/* Gradient bar */}
@@ -246,7 +278,7 @@ export function MarketSentimentGauge() {
         </span>
         <span className="text-lg ml-2">{info.emoji}</span>
         <p className="text-sm font-semibold mt-0.5" style={{ color: info.color }}>
-          {info.label}
+          {labelKo}
         </p>
       </div>
     </div>

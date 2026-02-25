@@ -79,3 +79,81 @@ exports.analyze = onRequest(
     }
   }
 );
+
+// ── RSS 파싱 헬퍼 ──────────────────────────────────────────────────
+function parseRssItems(xml, maxItems) {
+  const items = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+  let match;
+  while ((match = itemRegex.exec(xml)) !== null && items.length < maxItems) {
+    const itemXml = match[1];
+    const titleMatch = itemXml.match(
+      /<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/
+    );
+    if (titleMatch) {
+      const title = titleMatch[1]
+        .trim()
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&#39;/g, "'");
+      if (title && title.length > 5) items.push(title);
+    }
+  }
+  return items;
+}
+
+// ── 시장 데이터 엔드포인트 ─────────────────────────────────────────
+exports.market = onRequest(
+  { cors: true },
+  async (req, res) => {
+    if (req.method !== "GET") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+
+    const result = { fearGreed: null, news: [] };
+
+    // 1. 공포/탐욕 지수 (alternative.me — 무료, 키 없음)
+    try {
+      const fgRes = await fetch(
+        "https://api.alternative.me/fng/?limit=1",
+        { signal: AbortSignal.timeout(5000) }
+      );
+      const fgData = await fgRes.json();
+      const fg = fgData.data?.[0];
+      if (fg) {
+        result.fearGreed = {
+          value: parseInt(fg.value, 10),
+          label: fg.value_classification,
+        };
+      }
+    } catch (err) {
+      console.warn("Fear & Greed API 실패:", err.message);
+    }
+
+    // 2. 뉴스 (연합뉴스 경제 RSS — 무료)
+    const RSS_SOURCES = [
+      "https://www.yna.co.kr/rss/economy.xml",
+      "https://rss.hankyung.com/feed/finance.xml",
+    ];
+    for (const url of RSS_SOURCES) {
+      try {
+        const rssRes = await fetch(url, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; OvisionBot/1.0)" },
+          signal: AbortSignal.timeout(6000),
+        });
+        const rssText = await rssRes.text();
+        const items = parseRssItems(rssText, 12);
+        if (items.length > 0) {
+          result.news = items;
+          break;
+        }
+      } catch (err) {
+        console.warn(`RSS 실패 (${url}):`, err.message);
+      }
+    }
+
+    res.json(result);
+  }
+);
