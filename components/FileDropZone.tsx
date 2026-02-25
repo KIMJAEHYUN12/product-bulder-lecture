@@ -2,15 +2,16 @@
 
 import { useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Upload, ImageIcon } from "lucide-react";
+import { Upload, ImageIcon, X } from "lucide-react";
 import Image from "next/image";
 
 interface Props {
   previewUrl: string | null;
   onFile: (file: File) => void;
+  onClear?: () => void;
 }
 
-export function FileDropZone({ previewUrl, onFile }: Props) {
+export function FileDropZone({ previewUrl, onFile, onClear }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -66,6 +67,17 @@ export function FileDropZone({ previewUrl, onFile }: Props) {
             className="object-contain"
             unoptimized
           />
+          {/* X 삭제 버튼 */}
+          {onClear && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onClear(); }}
+              className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center
+                         bg-black/60 hover:bg-red-600 rounded-full text-white transition-colors shadow"
+              title="이미지 삭제"
+            >
+              <X size={14} />
+            </button>
+          )}
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
             <p className="text-white text-sm font-medium">클릭하여 변경</p>
           </div>

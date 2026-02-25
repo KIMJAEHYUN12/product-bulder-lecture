@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
@@ -192,9 +192,11 @@ export function NewsTicker({ news, isLoading }: { news?: NewsItem[]; isLoading?:
 
 /** 파일 업로드 전 오늘의 명언 */
 export function DailyQuote() {
-  const quote = useMemo(() => {
+  const [quote, setQuote] = useState(DAILY_QUOTES[0]);
+
+  useEffect(() => {
     const idx = new Date().getDate() % DAILY_QUOTES.length;
-    return DAILY_QUOTES[idx];
+    setQuote(DAILY_QUOTES[idx]);
   }, []);
 
   return (

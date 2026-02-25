@@ -107,7 +107,7 @@ export default function Home() {
           <div className="lg:col-span-2 flex flex-col gap-4">
             {!hasImage && <DailyQuote />}
 
-            <FileDropZone previewUrl={previewUrl} onFile={loadImage} />
+            <FileDropZone previewUrl={previewUrl} onFile={loadImage} onClear={reset} />
 
             <RoastButton
               disabled={!hasImage}

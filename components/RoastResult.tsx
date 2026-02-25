@@ -20,7 +20,12 @@ export function RoastResult({ roast, error, grade, mode = "kim" }: Props) {
     : ["================================", "     독설가 킴의 팩폭 영수증      ", "================================"];
   const [displayed, setDisplayed] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [dateStr, setDateStr] = useState("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setDateStr(new Date().toLocaleDateString("ko-KR"));
+  }, []);
 
   useEffect(() => {
     if (!roast) {
@@ -94,7 +99,7 @@ export function RoastResult({ roast, error, grade, mode = "kim" }: Props) {
           {/* Receipt footer */}
           <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-t border-dashed border-gray-200 dark:border-gray-700">
             <p className="text-xs font-mono text-gray-400 text-center">
-              이 영수증은 투자 권유가 아닙니다 · {new Date().toLocaleDateString("ko-KR")}
+              이 영수증은 투자 권유가 아닙니다 · {dateStr}
             </p>
           </div>
         </motion.div>
