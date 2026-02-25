@@ -20,6 +20,12 @@ import type { AnalysisMode } from "@/types";
 
 export default function Home() {
   const [mode, setMode] = useState<AnalysisMode>("kim");
+
+  const switchMode = (newMode: AnalysisMode) => {
+    if (newMode === mode) return;
+    setMode(newMode);
+    reset(); // 모드 전환 시 이전 결과 초기화
+  };
   const { state, loadImage, startRoast, reset } = useRoastFlow();
   const { fearGreed, news, econCalendar, commodities, kimComment, isLoading: marketLoading } = useMarketData();
   const {
@@ -63,7 +69,7 @@ export default function Home() {
             {/* 모드 토글 */}
             <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10">
               <button
-                onClick={() => setMode("kim")}
+                onClick={() => switchMode("kim")}
                 className={`text-xs font-mono px-3 py-1.5 rounded-md transition-all ${
                   mode === "kim"
                     ? "bg-kim-red text-white shadow"
@@ -73,7 +79,7 @@ export default function Home() {
                 킴
               </button>
               <button
-                onClick={() => setMode("makalong")}
+                onClick={() => switchMode("makalong")}
                 className={`text-xs font-mono px-3 py-1.5 rounded-md transition-all ${
                   mode === "makalong"
                     ? "bg-blue-500 text-white shadow"
