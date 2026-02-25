@@ -29,6 +29,7 @@ const initialState: RoastState = {
   roast: null,
   analysis: null,
   scores: null,
+  sector: null,
   error: null,
   grade: null,
   kimExpression: "neutral",
@@ -52,6 +53,7 @@ export function useRoastFlow() {
         roast: null,
         analysis: null,
         scores: null,
+        sector: null,
         error: null,
         grade: null,
         kimExpression: "neutral",
@@ -70,6 +72,7 @@ export function useRoastFlow() {
       roast: null,
       analysis: null,
       scores: null,
+      sector: null,
       error: null,
       kimExpression: "shocked",
     }));
@@ -83,6 +86,7 @@ export function useRoastFlow() {
         roast: data.roast,
         analysis: data.analysis,
         scores: data.scores,
+        sector: data.sector ?? null,
         grade: data.grade,
         kimExpression,
       }));

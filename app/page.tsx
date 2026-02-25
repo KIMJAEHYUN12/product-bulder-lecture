@@ -6,48 +6,71 @@ import { RoastButton } from "@/components/RoastButton";
 import { KimCharacter } from "@/components/KimCharacter";
 import { RoastResult } from "@/components/RoastResult";
 import { AnalysisReport } from "@/components/AnalysisReport";
+import {
+  NewsTicker,
+  DailyQuote,
+  MarketSentimentGauge,
+  IndustryChecklist,
+  EconomicCalendar,
+} from "@/components/DashboardWidgets";
 import { useRoastFlow } from "@/hooks/useRoastFlow";
 
 export default function Home() {
   const { state, loadImage, startRoast, reset } = useRoastFlow();
-  const { previewUrl, isLoading, roast, analysis, scores, error, grade, kimExpression } = state;
+  const {
+    previewUrl,
+    isLoading,
+    roast,
+    analysis,
+    scores,
+    sector,
+    error,
+    grade,
+    kimExpression,
+  } = state;
 
   const hasImage = !!previewUrl;
   const hasResult = !!roast || !!error;
 
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors">
-      <div className="max-w-6xl mx-auto px-4 py-8">
+    <main className="min-h-screen bg-gray-950 text-white grid-bg transition-colors">
+      {/* ── News Ticker ── */}
+      <NewsTicker />
 
+      <div className="max-w-[1400px] mx-auto px-4 py-6">
         {/* ── Header ── */}
-        <div className="flex items-start justify-between mb-8">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-black text-gray-900 dark:text-white leading-tight">
-              독설가 킴의
-              <br />
+            <h1 className="text-xl font-black text-white leading-tight">
+              독설가 킴의{" "}
               <span className="text-kim-red">팩폭 주식 상담소</span>
             </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              포트폴리오 올려봐요. 뼈 때려드릴게요.
+            <p className="text-xs text-gray-500 mt-0.5 font-mono">
+              6대 산업 전문가 대시보드 · 38세 현장직 베테랑 AI
             </p>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-3">
+            <KimCharacter expression={kimExpression} isLoading={isLoading} />
+            <ThemeToggle />
+          </div>
         </div>
 
-        {/* ── Main grid: left input panel + right results ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {/* ── Main 3-column grid ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
 
-          {/* ── LEFT: upload + controls ── */}
-          <div className="flex flex-col gap-4">
-            {/* Kim character */}
-            <div className="flex justify-center">
-              <KimCharacter expression={kimExpression} isLoading={isLoading} />
-            </div>
+          {/* ── LEFT SIDEBAR ── */}
+          <div className="lg:col-span-1 flex flex-col gap-4">
+            <MarketSentimentGauge />
+            <IndustryChecklist sector={sector} />
+          </div>
 
-            {/* Drop zone */}
+          {/* ── CENTER ── */}
+          <div className="lg:col-span-2 flex flex-col gap-4">
+            {/* Show quote before image is loaded */}
+            {!hasImage && <DailyQuote />}
+
             <FileDropZone previewUrl={previewUrl} onFile={loadImage} />
 
-            {/* CTA */}
             <RoastButton
               disabled={!hasImage}
               isLoading={isLoading}
@@ -55,30 +78,33 @@ export default function Home() {
               onClick={startRoast}
             />
 
-            {/* Reset */}
             {hasResult && !isLoading && (
               <div className="text-center">
                 <button
                   onClick={reset}
-                  className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200
-                             underline underline-offset-2 transition-colors"
+                  className="text-xs text-gray-500 hover:text-gray-300 underline underline-offset-2 transition-colors font-mono"
                 >
                   새 포트폴리오로 시작
                 </button>
               </div>
             )}
+
+            <RoastResult roast={roast} error={error} grade={grade} />
           </div>
 
-          {/* ── RIGHT: results (roast receipt + analysis report) ── */}
-          <div className="flex flex-col gap-6">
-            {/* Roast receipt */}
-            <RoastResult roast={roast} error={error} grade={grade} />
-
-            {/* AI financial report */}
-            <AnalysisReport analysis={analysis} scores={scores} />
+          {/* ── RIGHT ── */}
+          <div className="lg:col-span-1">
+            <AnalysisReport
+              analysis={analysis}
+              scores={scores}
+              sector={sector}
+            />
           </div>
 
         </div>
+
+        {/* ── Bottom: Economic Calendar ── */}
+        <EconomicCalendar />
       </div>
     </main>
   );

@@ -26,6 +26,7 @@ export async function analyzePortfolio(
       roast: raw.text,
       analysis: null,
       grade: null,
+      sector: null,
       scores: null,
     };
   }

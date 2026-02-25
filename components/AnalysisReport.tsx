@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from "recharts";
 import { TrendingUp, ShieldAlert, BarChart2, Layers, Target } from "lucide-react";
-import type { PortfolioScores } from "@/types";
+import type { PortfolioScores, Sector } from "@/types";
 
 const SCORE_META: {
   key: keyof PortfolioScores;
@@ -25,24 +25,70 @@ const SCORE_META: {
   { key: "risk_management", label: "리스크 관리", shortLabel: "리스크", icon: BarChart2 },
 ];
 
-function scoreColor(v: number) {
-  if (v >= 70) return "text-green-500";
-  if (v >= 45) return "text-yellow-500";
-  return "text-red-500";
-}
+const SECTOR_META: Record<
+  string,
+  { emoji: string; badge: string; label: string }
+> = {
+  이차전지: {
+    emoji: "⚡",
+    badge: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
+    label: "이차전지",
+  },
+  반도체: {
+    emoji: "💾",
+    badge: "text-blue-400 bg-blue-400/10 border-blue-400/30",
+    label: "반도체",
+  },
+  전력: {
+    emoji: "🔌",
+    badge: "text-orange-400 bg-orange-400/10 border-orange-400/30",
+    label: "전력/에너지",
+  },
+  AI: {
+    emoji: "🧠",
+    badge: "text-purple-400 bg-purple-400/10 border-purple-400/30",
+    label: "AI/IT",
+  },
+  바이오: {
+    emoji: "🧬",
+    badge: "text-green-400 bg-green-400/10 border-green-400/30",
+    label: "바이오",
+  },
+  자동차: {
+    emoji: "⚙️",
+    badge: "text-gray-300 bg-gray-300/10 border-gray-300/30",
+    label: "자동차",
+  },
+  혼합: {
+    emoji: "📊",
+    badge: "text-indigo-400 bg-indigo-400/10 border-indigo-400/30",
+    label: "혼합 포트폴리오",
+  },
+  기타: {
+    emoji: "📊",
+    badge: "text-gray-400 bg-gray-400/10 border-gray-400/30",
+    label: "기타",
+  },
+};
 
 function scoreBarColor(v: number) {
   if (v >= 70) return "bg-green-500";
   if (v >= 45) return "bg-yellow-500";
   return "bg-red-500";
 }
+function scoreTextColor(v: number) {
+  if (v >= 70) return "text-green-400";
+  if (v >= 45) return "text-yellow-400";
+  return "text-red-400";
+}
 
 interface Props {
   analysis: string | null;
   scores: PortfolioScores | null;
+  sector: Sector | null;
 }
 
-export function AnalysisReport({ analysis, scores }: Props) {
+export function AnalysisReport({ analysis, scores, sector }: Props) {
   const radarData = scores
     ? SCORE_META.map(({ shortLabel, key }) => ({
         subject: shortLabel,
@@ -50,6 +96,8 @@ export function AnalysisReport({ analysis, scores }: Props) {
         fullMark: 100,
       }))
     : [];
+
+  const sectorMeta = sector ? (SECTOR_META[sector] ?? SECTOR_META["기타"]) : null;
 
   return (
     <AnimatePresence>
@@ -59,74 +107,104 @@ export function AnalysisReport({ analysis, scores }: Props) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 20 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
-          className="rounded-xl border border-gray-200 dark:border-gray-700
-                     bg-white dark:bg-gray-900 overflow-hidden shadow-xl flex flex-col"
+          className="relative glass-card overflow-hidden"
         >
-          {/* Header */}
-          <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40">
-            <div className="flex items-center gap-2">
-              <BarChart2 size={18} className="text-blue-500" />
-              <h3 className="font-bold text-gray-900 dark:text-white text-sm tracking-wide">
-                AI 전문 재무 리포트
-              </h3>
+          {/* Sector watermark */}
+          {sectorMeta && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
+              <span
+                className="text-[10rem] leading-none opacity-[0.04]"
+                aria-hidden="true"
+              >
+                {sectorMeta.emoji}
+              </span>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              독설가 킴 · 현장 전문가 분석
+          )}
+
+          {/* Header */}
+          <div className="relative px-5 py-4 border-b border-white/8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BarChart2 size={16} className="text-indigo-400" />
+                <h3 className="font-bold text-white text-sm tracking-wide">
+                  AI 전문 재무 리포트
+                </h3>
+              </div>
+              {sectorMeta && (
+                <span
+                  className={`text-xs font-bold px-2.5 py-1 rounded-full border ${sectorMeta.badge}`}
+                >
+                  {sectorMeta.emoji} {sectorMeta.label}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5 font-mono">
+              독설가 킴 · 38세 현장직 베테랑 분석
             </p>
           </div>
 
           {/* Radar chart */}
           {scores && (
-            <div className="px-4 pt-4 pb-2">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">
+            <div className="relative px-4 pt-4 pb-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
                 포트폴리오 건강 지표
               </p>
-              <ResponsiveContainer width="100%" height={200}>
-                <RadarChart data={radarData} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-                  <PolarGrid stroke="#374151" strokeOpacity={0.3} />
+              <ResponsiveContainer width="100%" height={190}>
+                <RadarChart
+                  data={radarData}
+                  margin={{ top: 8, right: 20, bottom: 8, left: 20 }}
+                >
+                  <PolarGrid stroke="#ffffff" strokeOpacity={0.06} />
                   <PolarAngleAxis
                     dataKey="subject"
-                    tick={{ fontSize: 11, fill: "#9ca3af" }}
+                    tick={{ fontSize: 11, fill: "#6b7280" }}
                   />
                   <Tooltip
                     formatter={(val) => [`${val ?? 0}점`, "점수"]}
                     contentStyle={{
-                      background: "#1f2937",
-                      border: "1px solid #374151",
+                      background: "rgba(15,15,25,0.95)",
+                      border: "1px solid rgba(255,255,255,0.1)",
                       borderRadius: "8px",
                       fontSize: "12px",
                       color: "#f9fafb",
+                      backdropFilter: "blur(8px)",
                     }}
                   />
                   <Radar
                     dataKey="value"
-                    stroke="#6366f1"
-                    fill="#6366f1"
-                    fillOpacity={0.25}
-                    strokeWidth={2}
+                    stroke="#818cf8"
+                    fill="#818cf8"
+                    fillOpacity={0.2}
+                    strokeWidth={1.5}
                   />
                 </RadarChart>
               </ResponsiveContainer>
 
               {/* Score bars */}
-              <div className="space-y-2 mt-2">
+              <div className="space-y-2 mt-1">
                 {SCORE_META.map(({ key, label, icon: Icon }) => {
                   const v = scores[key];
                   return (
                     <div key={key} className="flex items-center gap-2">
-                      <Icon size={13} className="text-gray-400 shrink-0" />
-                      <span className="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">
+                      <Icon size={12} className="text-gray-600 shrink-0" />
+                      <span className="text-xs text-gray-500 w-16 shrink-0">
                         {label}
                       </span>
-                      <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800">
+                      <div className="flex-1 h-1 rounded-full bg-white/5">
                         <motion.div
                           className={`h-full rounded-full ${scoreBarColor(v)}`}
                           initial={{ width: 0 }}
                           animate={{ width: `${v}%` }}
-                          transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+                          transition={{
+                            duration: 0.9,
+                            ease: "easeOut",
+                            delay: 0.2,
+                          }}
                         />
                       </div>
-                      <span className={`text-xs font-bold w-8 text-right ${scoreColor(v)}`}>
+                      <span
+                        className={`text-xs font-bold w-7 text-right font-mono ${scoreTextColor(v)}`}
+                      >
                         {v}
                       </span>
                     </div>
@@ -138,16 +216,16 @@ export function AnalysisReport({ analysis, scores }: Props) {
 
           {/* Divider */}
           {scores && analysis && (
-            <div className="mx-5 border-t border-dashed border-gray-200 dark:border-gray-700 my-3" />
+            <div className="mx-5 border-t border-dashed border-white/10 my-3" />
           )}
 
           {/* Analysis text */}
           {analysis && (
-            <div className="px-5 pb-5">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">
+            <div className="relative px-5 pb-5">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
                 전문가 소견
               </p>
-              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-mono">
                 {analysis}
               </p>
             </div>
