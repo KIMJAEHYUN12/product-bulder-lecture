@@ -214,21 +214,26 @@ const FG_LABEL_KO: Record<string, string> = {
 };
 
 /** 시장 공포/탐욕 게이지 */
-export function MarketSentimentGauge({ fearGreed }: { fearGreed?: FearGreedData | null }) {
-  // 실제 데이터 있으면 사용, 없으면 날짜 기반 의사난수 fallback
-  const raw = useMemo(() => calcFearGreed(), []);
-  const value = fearGreed ? fearGreed.value : Math.round(raw);
-  const labelKo = fearGreed
-    ? (FG_LABEL_KO[fearGreed.label] ?? fearGreed.label)
-    : fgInfo(value).label;
-  const info = fgInfo(value);
-  const isReal = !!fearGreed;
+export function MarketSentimentGauge({
+  fearGreed,
+  isLoading,
+}: {
+  fearGreed?: FearGreedData | null;
+  isLoading?: boolean;
+}) {
   const [animated, setAnimated] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setAnimated(true), 300);
-    return () => clearTimeout(t);
-  }, []);
+    if (fearGreed) {
+      const t = setTimeout(() => setAnimated(true), 100);
+      return () => clearTimeout(t);
+    }
+  }, [fearGreed]);
+
+  const isReal = !!fearGreed;
+  const value = fearGreed?.value ?? 50;
+  const labelKo = fearGreed ? (FG_LABEL_KO[fearGreed.label] ?? fearGreed.label) : "";
+  const info = fgInfo(value);
 
   return (
     <div className="glass-card p-4">
@@ -247,7 +252,7 @@ export function MarketSentimentGauge({ fearGreed }: { fearGreed?: FearGreedData 
             ? "text-green-400 border-green-500/30 bg-green-500/5"
             : "text-gray-600 border-gray-700"
         }`}>
-          {isReal ? "실시간" : "추정치"}
+          {isLoading ? "..." : isReal ? "실시간" : "오류"}
         </span>
       </div>
 
@@ -256,7 +261,7 @@ export function MarketSentimentGauge({ fearGreed }: { fearGreed?: FearGreedData 
         <div
           className="absolute top-1/2 w-4 h-4 rounded-full bg-white shadow-lg border-2 border-gray-900 transition-all duration-1000 ease-out"
           style={{
-            left: `${animated ? value : 50}%`,
+            left: `${isReal && animated ? value : 50}%`,
             transform: "translateX(-50%) translateY(-50%)",
           }}
         />
@@ -269,13 +274,22 @@ export function MarketSentimentGauge({ fearGreed }: { fearGreed?: FearGreedData 
       </div>
 
       <div className="text-center">
-        <span className="text-3xl font-black font-mono" style={{ color: info.color }}>
-          {value}
-        </span>
-        <span className="text-lg ml-2">{info.emoji}</span>
-        <p className="text-sm font-semibold mt-0.5" style={{ color: info.color }}>
-          {labelKo}
-        </p>
+        {isLoading || !fearGreed ? (
+          <div className="py-1">
+            <div className="h-8 w-16 mx-auto rounded bg-white/5 animate-pulse mb-1" />
+            <div className="h-4 w-20 mx-auto rounded bg-white/5 animate-pulse" />
+          </div>
+        ) : (
+          <>
+            <span className="text-3xl font-black font-mono" style={{ color: info.color }}>
+              {value}
+            </span>
+            <span className="text-lg ml-2">{info.emoji}</span>
+            <p className="text-sm font-semibold mt-0.5" style={{ color: info.color }}>
+              {labelKo}
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

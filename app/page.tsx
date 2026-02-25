@@ -62,7 +62,7 @@ export default function Home() {
 
           {/* ── LEFT SIDEBAR ── */}
           <div className="lg:col-span-1 flex flex-col gap-4">
-            <MarketSentimentGauge fearGreed={fearGreed} />
+            <MarketSentimentGauge fearGreed={fearGreed} isLoading={marketLoading} />
             <CommodityTicker commodities={commodities} kimComment={kimComment} isLoading={marketLoading} />
           </div>
 
