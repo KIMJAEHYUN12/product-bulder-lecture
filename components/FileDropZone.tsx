@@ -53,6 +53,7 @@ export function FileDropZone({ previewUrl, onFile }: Props) {
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) handleFile(file);
+          e.target.value = ""; // 같은 파일 재선택 가능하도록 초기화
         }}
       />
 
