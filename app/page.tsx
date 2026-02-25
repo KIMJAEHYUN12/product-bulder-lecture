@@ -113,7 +113,7 @@ export default function Home() {
               disabled={!hasImage}
               isLoading={isLoading}
               hasResult={hasResult}
-              onClick={() => startRoast(mode)}
+              onClick={() => startRoast(mode, state.imageBase64 ?? "", state.mimeType ?? "")}
             />
 
             {hasResult && !isLoading && (

@@ -62,8 +62,11 @@ export function useRoastFlow() {
     reader.readAsDataURL(file);
   }, []);
 
-  const startRoast = useCallback(async (mode: AnalysisMode = "kim") => {
-    const { imageBase64, mimeType } = stateRef.current;
+  const startRoast = useCallback(async (
+    mode: AnalysisMode = "kim",
+    imageBase64: string,
+    mimeType: string,
+  ) => {
     if (!imageBase64 || !mimeType) return;
 
     setState((prev) => ({
