@@ -10,7 +10,7 @@ import {
   NewsTicker,
   DailyQuote,
   MarketSentimentGauge,
-  IndustryChecklist,
+  CommodityTicker,
   EconomicCalendar,
 } from "@/components/DashboardWidgets";
 import { useRoastFlow } from "@/hooks/useRoastFlow";
@@ -18,7 +18,7 @@ import { useMarketData } from "@/hooks/useMarketData";
 
 export default function Home() {
   const { state, loadImage, startRoast, reset } = useRoastFlow();
-  const { fearGreed, news, econCalendar, isLoading: marketLoading } = useMarketData();
+  const { fearGreed, news, econCalendar, commodities, kimComment, isLoading: marketLoading } = useMarketData();
   const {
     previewUrl,
     isLoading,
@@ -63,7 +63,7 @@ export default function Home() {
           {/* ── LEFT SIDEBAR ── */}
           <div className="lg:col-span-1 flex flex-col gap-4">
             <MarketSentimentGauge fearGreed={fearGreed} />
-            <IndustryChecklist sector={sector} />
+            <CommodityTicker commodities={commodities} kimComment={kimComment} isLoading={marketLoading} />
           </div>
 
           {/* ── CENTER ── */}
