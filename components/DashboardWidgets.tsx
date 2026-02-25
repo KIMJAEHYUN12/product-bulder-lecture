@@ -363,7 +363,7 @@ export function CommodityTicker({
           {commodities.map((c) => (
             <motion.a
               key={c.key}
-              href={COMMODITY_URLS[c.key]}
+              href={COMMODITY_URLS[c.key] ?? "#"}
               target="_blank"
               rel="noopener noreferrer"
               initial={{ opacity: 0, scale: 0.95 }}
