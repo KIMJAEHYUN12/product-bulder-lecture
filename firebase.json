@@ -1,0 +1,15 @@
+{
+  "hosting": {
+    "public": "out",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "functions/**"],
+    "rewrites": [
+      {
+        "source": "/api/analyze",
+        "function": "analyze"
+      }
+    ]
+  },
+  "functions": {
+    "source": "functions"
+  }
+}
