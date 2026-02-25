@@ -3,7 +3,11 @@ import type { AnalyzeRequest, AnalyzeResponse } from "@/types";
 export async function analyzePortfolio(
   req: AnalyzeRequest
 ): Promise<AnalyzeResponse> {
-  const response = await fetch("/api/analyze", {
+  const API_URL =
+    process.env.NEXT_PUBLIC_API_URL ||
+    "https://us-central1-mylen-24263782-5d205.cloudfunctions.net/analyze";
+
+  const response = await fetch(API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
