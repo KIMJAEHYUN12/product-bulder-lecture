@@ -308,6 +308,13 @@ export function MarketSentimentGauge({
   );
 }
 
+const COMMODITY_URLS: Record<string, string> = {
+  copper:   "https://finance.yahoo.com/quote/HG%3DF/",
+  lithium:  "https://finance.yahoo.com/quote/LIT/",
+  nickel:   "https://finance.yahoo.com/quote/NI%3DF/",
+  aluminum: "https://finance.yahoo.com/quote/ALI%3DF/",
+};
+
 /** 핵심 원재료 시세 위젯 */
 export function CommodityTicker({
   commodities,
@@ -352,11 +359,14 @@ export function CommodityTicker({
       ) : commodities && commodities.length > 0 ? (
         <div className="grid grid-cols-2 gap-2 mb-3">
           {commodities.map((c) => (
-            <motion.div
+            <motion.a
               key={c.key}
+              href={COMMODITY_URLS[c.key]}
+              target="_blank"
+              rel="noopener noreferrer"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className={`rounded-lg p-2.5 border ${
+              className={`rounded-lg p-2.5 border block transition-opacity hover:opacity-80 cursor-pointer ${
                 c.changePct > 0
                   ? "border-red-500/30 bg-red-950/20"
                   : c.changePct < 0
@@ -376,7 +386,7 @@ export function CommodityTicker({
                 {" "}{Math.abs(c.changePct).toFixed(2)}%
               </p>
               <p className="text-[9px] text-gray-700 mt-0.5">{c.note}</p>
-            </motion.div>
+            </motion.a>
           ))}
         </div>
       ) : (
@@ -395,6 +405,15 @@ export function CommodityTicker({
     </div>
   );
 }
+
+const ECON_URLS: Record<string, string> = {
+  "금통위": "https://www.bok.or.kr/portal/singl/baseRate/list.do?dataSeCd=01&menuNo=200643",
+  "FOMC":   "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+  "실적":   "https://www.samsung.com/sec/ir/ir-events-presentations/events/",
+  "물가":   "https://kostat.go.kr/board.es?mid=a10301060200&bid=218",
+  "무역":   "https://www.customs.go.kr/kcs/ad/ex/bbs/selectLetterBoardList.do?bbsId=2817",
+  "GDP":    "https://www.bok.or.kr/portal/singl/baseRate/list.do?dataSeCd=01&menuNo=200643",
+};
 
 /** 하단 주요 경제 일정 */
 export function EconomicCalendar({ events }: { events?: EconEvent[] }) {
@@ -432,12 +451,15 @@ export function EconomicCalendar({ events }: { events?: EconEvent[] }) {
       {hasEvents ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
           {events!.map((ev, i) => (
-            <motion.div
+            <motion.a
               key={i}
+              href={ECON_URLS[ev.tag] ?? "#"}
+              target="_blank"
+              rel="noopener noreferrer"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06 }}
-              className={`rounded-lg p-2.5 border ${
+              className={`rounded-lg p-2.5 border block transition-opacity hover:opacity-80 cursor-pointer ${
                 ev.hot
                   ? "border-red-500/30 bg-red-950/20"
                   : "border-white/5 bg-white/[0.02]"
@@ -450,7 +472,7 @@ export function EconomicCalendar({ events }: { events?: EconEvent[] }) {
               <span className={`text-xs px-1.5 py-0.5 rounded-full font-mono ${tagStyle(ev.tag)}`}>
                 {ev.tag}
               </span>
-            </motion.div>
+            </motion.a>
           ))}
         </div>
       ) : (
