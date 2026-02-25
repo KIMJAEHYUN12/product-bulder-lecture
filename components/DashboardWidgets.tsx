@@ -208,7 +208,7 @@ export function DailyQuote() {
       <div className="flex items-center justify-center gap-1.5 mb-3">
         <Zap size={12} className="text-kim-gold" />
         <p className="text-xs text-kim-gold uppercase tracking-widest font-mono">
-          공장장 킴의 오늘의 훈수
+          오비젼의 오늘의 훈수
         </p>
         <Zap size={12} className="text-kim-gold" />
       </div>
@@ -399,7 +399,7 @@ export function CommodityTicker({
       {kimComment && !isLoading && (
         <div className="border-t border-white/10 pt-3">
           <p className="text-[10px] text-kim-gold font-mono mb-1.5">
-            ⚙️ 공장장 킴의 원가 분석
+            ⚙️ 오비젼의 원가 분석
           </p>
           <p className="text-xs text-gray-300 leading-relaxed">{kimComment}</p>
         </div>

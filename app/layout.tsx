@@ -3,7 +3,7 @@ import { ThemeProvider } from "next-themes";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "독설가 킴의 팩폭 주식 상담소",
+  title: "오비젼의 팩폭 주식 상담소",
   description: "포트폴리오 올려봐요. 뼈 때려드릴게요.",
 };
 

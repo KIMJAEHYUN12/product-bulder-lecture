@@ -16,8 +16,8 @@ interface Props {
 
 export function RoastResult({ roast, error, grade, mode = "kim" }: Props) {
   const headerLines = mode === "makalong"
-    ? ["================================", "   마카롱의 투자 전략 리포트   ", "================================"]
-    : ["================================", "     독설가 킴의 팩폭 영수증      ", "================================"];
+    ? ["================================", "      MC.R 투자 전략 리포트      ", "================================"]
+    : ["================================", "      오비젼의 팩폭 영수증       ", "================================"];
   const [displayed, setDisplayed] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [dateStr, setDateStr] = useState("");

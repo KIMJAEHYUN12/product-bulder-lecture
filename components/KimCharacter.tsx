@@ -35,7 +35,7 @@ export function KimCharacter({ expression, isLoading }: Props) {
         {emoji}
       </motion.div>
       <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-        독설가 킴 · {label}
+        오비젼 · {label}
       </span>
     </motion.div>
   );

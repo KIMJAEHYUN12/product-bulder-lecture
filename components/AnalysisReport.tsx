@@ -139,7 +139,7 @@ export function AnalysisReport({ analysis, scores, sector }: Props) {
               )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5 font-mono">
-              독설가 킴 · 38세 현장직 베테랑 분석
+              오비젼 · 현장직 베테랑 분석
             </p>
           </div>
 
