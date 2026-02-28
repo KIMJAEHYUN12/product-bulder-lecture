@@ -311,7 +311,7 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
   const showDropdown = suggestions.length > 0;
 
   return (
-    <div className="glass-card rounded-xl p-4 relative z-0 overflow-visible">
+    <div className="glass-card rounded-xl p-4 relative overflow-visible">
       {/* 헤더 */}
       <div className="flex items-center gap-2 mb-3">
         <span className="text-base">📐</span>
