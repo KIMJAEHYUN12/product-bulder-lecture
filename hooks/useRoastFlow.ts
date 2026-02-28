@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import type { RoastState, Grade, KimExpression, AnalysisMode } from "@/types";
-import { analyzePortfolio } from "@/lib/analyzeApi";
+import { analyzePortfolioStream, analyzeBitgakStream } from "@/lib/analyzeApi";
 
 function deriveExpression(grade: Grade): KimExpression {
   switch (grade) {
@@ -26,10 +26,12 @@ const initialState: RoastState = {
   mimeType: null,
   previewUrl: null,
   isLoading: false,
+  isStreaming: false,
   roast: null,
   analysis: null,
   scores: null,
   sector: null,
+  chartLines: null,
   error: null,
   grade: null,
   kimExpression: "neutral",
@@ -56,71 +58,149 @@ export function useRoastFlow() {
         sector: null,
         error: null,
         grade: null,
+        isStreaming: false,
         kimExpression: "neutral",
       }));
     };
     reader.readAsDataURL(file);
   }, []);
 
-  const startRoast = useCallback(async (
-    mode: AnalysisMode = "kim",
-    imageBase64: string,
-    mimeType: string,
-  ) => {
-    if (!imageBase64 || !mimeType) return;
+  const startRoast = useCallback(
+    async (mode: AnalysisMode = "kim", imageBase64: string, mimeType: string) => {
+      if (!imageBase64 || !mimeType) return;
 
-    setState((prev) => ({
-      ...prev,
-      isLoading: true,
-      roast: null,
-      analysis: null,
-      scores: null,
-      sector: null,
-      error: null,
-      kimExpression: "shocked",
-    }));
-
-    try {
-      const data = await analyzePortfolio({ imageBase64, mimeType, mode });
-      const kimExpression = deriveExpression(data.grade);
       setState((prev) => ({
         ...prev,
-        isLoading: false,
-        roast: data.roast,
-        analysis: data.analysis,
-        scores: data.scores,
-        sector: data.sector ?? null,
-        grade: data.grade,
-        kimExpression,
-      }));
-    } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: (err as Error).message,
+        isLoading: true,
+        isStreaming: false,
+        roast: null,
+        analysis: null,
+        scores: null,
+        sector: null,
+        error: null,
         kimExpression: "shocked",
       }));
-    }
-  }, []);
+
+      await analyzePortfolioStream(
+        { imageBase64, mimeType, mode },
+
+        // 스트리밍 청크: roast 텍스트가 조금씩 쌓임
+        (partial) => {
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            isStreaming: true,
+            roast: partial,
+          }));
+        },
+
+        // 완료: 전체 결과 세팅
+        (data) => {
+          const kimExpression = deriveExpression(data.grade);
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            isStreaming: false,
+            roast: data.roast,
+            analysis: data.analysis,
+            scores: data.scores,
+            sector: data.sector ?? null,
+            chartLines: data.chartLines ?? null,
+            grade: data.grade,
+            kimExpression,
+          }));
+        },
+
+        // 오류
+        (err) => {
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            isStreaming: false,
+            error: err.message,
+            kimExpression: "shocked",
+          }));
+        }
+      );
+    },
+    []
+  );
+
+  const startBitgakRoast = useCallback(
+    async (textSummary: string, stockName: string) => {
+      if (!textSummary) return;
+
+      setState((prev) => ({
+        ...prev,
+        isLoading: true,
+        isStreaming: false,
+        roast: null,
+        analysis: null,
+        scores: null,
+        sector: null,
+        error: null,
+        kimExpression: "shocked",
+      }));
+
+      await analyzeBitgakStream(
+        textSummary,
+        stockName,
+        (partial) => {
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            isStreaming: true,
+            roast: partial,
+          }));
+        },
+        (data) => {
+          const kimExpression = deriveExpression(data.grade);
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            isStreaming: false,
+            roast: data.roast,
+            analysis: data.analysis,
+            scores: data.scores,
+            sector: data.sector ?? null,
+            chartLines: null,
+            grade: data.grade,
+            kimExpression,
+          }));
+        },
+        (err) => {
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            isStreaming: false,
+            error: err.message,
+            kimExpression: "shocked",
+          }));
+        }
+      );
+    },
+    []
+  );
 
   const reset = useCallback(() => {
     setState(initialState);
   }, []);
 
-  // 이미지는 유지하고 분석 결과만 초기화 (모드 전환 시 사용)
   const clearResult = useCallback(() => {
     setState((prev) => ({
       ...prev,
       isLoading: false,
+      isStreaming: false,
       roast: null,
       analysis: null,
       scores: null,
       sector: null,
+      chartLines: null,
       error: null,
       grade: null,
       kimExpression: "neutral",
     }));
   }, []);
 
-  return { state, loadImage, startRoast, reset, clearResult };
+  return { state, loadImage, startRoast, startBitgakRoast, reset, clearResult };
 }

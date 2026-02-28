@@ -2,14 +2,75 @@
   "hosting": {
     "public": "out",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "functions/**"],
+    "headers": [
+      {
+        "source": "**/*.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "source": "**/*.@(js|css)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      },
+      {
+        "source": "/version.json",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      }
+    ],
     "rewrites": [
       {
         "source": "/api/analyze",
         "function": "analyze"
+      },
+      {
+        "source": "/api/kospi-futures",
+        "function": "kospiFutures"
+      },
+      {
+        "source": "/api/stock-chart",
+        "function": "stockChart"
+      },
+      {
+        "source": "/api/stock-prices",
+        "function": "stockPrices"
+      },
+      {
+        "source": "/api/investor-profile",
+        "function": "investorProfile"
+      },
+      {
+        "source": "/api/stock-roast",
+        "function": "stockRoast"
+      },
+      {
+        "source": "/api/chart-game",
+        "function": "chartGame"
+      },
+      {
+        "source": "/api/stock-briefing",
+        "function": "stockBriefing"
+      },
+      {
+        "source": "/api/stock-search",
+        "function": "stockSearch"
+      },
+      {
+        "source": "/api/market",
+        "function": "market"
+      },
+      {
+        "source": "/api/investor-trend",
+        "function": "investorTrend"
+      },
+      {
+        "source": "/api/popular-stocks",
+        "function": "popularStocks"
       }
     ]
   },
   "functions": {
     "source": "functions"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
   }
 }

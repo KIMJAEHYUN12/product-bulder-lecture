@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 랭킹: 누구나 읽기 가능, 로그인한 사용자만 자신의 항목 쓰기, 관리자는 삭제 가능
+    match /mock_rankings/{userId} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if request.auth != null &&
+        (request.auth.uid == userId ||
+         request.auth.uid in ["zqyi38VH6vPN6HQNiOxEVBbxCg03"]);
+    }
+
+    // 포트폴리오: 로그인한 사용자만 자신의 문서 읽기/쓰기
+    match /portfolios/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 차트 게임 랭킹: 누구나 읽기, 로그인한 사용자만 자신의 항목 쓰기
+    match /chart_game_rankings/{userId} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 투자 게시판: 누구나 읽기, 로그인한 사용자만 작성/수정/삭제 (자신의 글 or 관리자)
+    match /community_posts/{postId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow delete: if request.auth != null &&
+        (request.auth.uid == resource.data.userId ||
+         request.auth.uid in ["zqyi38VH6vPN6HQNiOxEVBbxCg03"]);
+    }
+  }
+}

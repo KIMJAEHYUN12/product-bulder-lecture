@@ -12,6 +12,7 @@ export interface EconEvent {
   event: string;
   tag: string;
   hot: boolean;
+  url?: string;
 }
 
 export interface CommodityItem {
@@ -37,9 +38,10 @@ export interface MarketData {
   isLoading: boolean;
 }
 
+const FIREBASE_HOST = "https://mylen-24263782-5d205.web.app";
 const MARKET_URL =
   process.env.NEXT_PUBLIC_MARKET_API_URL ||
-  "https://market-cryqnhf6fq-uc.a.run.app";
+  `${FIREBASE_HOST}/api/market`;
 
 export function useMarketData(): MarketData {
   const [fearGreed, setFearGreed] = useState<FearGreedData | null>(null);
@@ -50,17 +52,26 @@ export function useMarketData(): MarketData {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch(MARKET_URL)
+    const controller = new AbortController();
+    let mounted = true;
+
+    fetch(MARKET_URL, { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => {
+        if (!mounted) return;
         if (d.fearGreed) setFearGreed(d.fearGreed);
         if (d.news?.length > 0) setNews(d.news);
         if (d.econCalendar?.length > 0) setEconCalendar(d.econCalendar);
         if (d.commodities?.length > 0) setCommodities(d.commodities);
         if (d.kimComment) setKimComment(d.kimComment);
       })
-      .catch((err) => console.warn("Market data fetch failed:", err))
-      .finally(() => setIsLoading(false));
+      .catch(() => {})
+      .finally(() => { if (mounted) setIsLoading(false); });
+
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
   }, []);
 
   return { fearGreed, news, econCalendar, commodities, kimComment, isLoading };

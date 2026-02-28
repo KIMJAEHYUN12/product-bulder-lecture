@@ -9,9 +9,10 @@ interface Props {
   previewUrl: string | null;
   onFile: (file: File) => void;
   onClear?: () => void;
+  mode?: "kim" | "makalong";
 }
 
-export function FileDropZone({ previewUrl, onFile, onClear }: Props) {
+export function FileDropZone({ previewUrl, onFile, onClear, mode = "kim" }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -36,8 +37,12 @@ export function FileDropZone({ previewUrl, onFile, onClear }: Props) {
     <motion.div
       className={`relative rounded-xl border-2 border-dashed transition-colors cursor-pointer
         ${isDragging
-          ? "border-kim-red bg-red-50 dark:bg-red-950/20"
-          : "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 hover:border-kim-gold"
+          ? mode === "makalong"
+            ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+            : "border-kim-red bg-red-50 dark:bg-red-950/20"
+          : mode === "makalong"
+            ? "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 hover:border-blue-400"
+            : "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 hover:border-kim-gold"
         }`}
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -62,7 +67,7 @@ export function FileDropZone({ previewUrl, onFile, onClear }: Props) {
         <div className="relative w-full h-56 rounded-xl overflow-hidden">
           <Image
             src={previewUrl}
-            alt="포트폴리오 미리보기"
+            alt={mode === "makalong" ? "차트 미리보기" : "포트폴리오 미리보기"}
             fill
             className="object-contain"
             unoptimized
@@ -84,19 +89,34 @@ export function FileDropZone({ previewUrl, onFile, onClear }: Props) {
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center gap-3 py-12 px-4">
-          <div className="p-3 rounded-full bg-kim-gold/10">
+          <div className={`p-3 rounded-full ${mode === "makalong" ? "bg-blue-500/10" : "bg-kim-gold/10"}`}>
             {isDragging ? (
-              <ImageIcon size={32} className="text-kim-red" />
+              <ImageIcon size={32} className={mode === "makalong" ? "text-blue-500" : "text-kim-red"} />
             ) : (
-              <Upload size={32} className="text-kim-gold" />
+              <Upload size={32} className={mode === "makalong" ? "text-blue-400" : "text-kim-gold"} />
             )}
           </div>
           <p className="text-gray-600 dark:text-gray-400 text-sm text-center">
-            포트폴리오 스크린샷을 드래그하거나
+            {mode === "makalong"
+              ? "차트 캡처(주봉·일봉·분봉)를 드래그하거나"
+              : "포트폴리오 스크린샷을 드래그하거나 클릭하세요"}
           </p>
-          <span className="px-4 py-2 bg-kim-gold/90 hover:bg-kim-gold text-white text-sm rounded-lg transition-colors">
+          <span className={`px-4 py-2 text-white text-sm rounded-lg transition-colors ${
+            mode === "makalong" ? "bg-blue-500/90 hover:bg-blue-500" : "bg-kim-gold/90 hover:bg-kim-gold"
+          }`}>
             파일 선택
           </span>
+          {mode === "makalong" ? (
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center mt-1 font-mono leading-relaxed">
+              권장: 네이버증권 · 트레이딩뷰 · 키움 영웅문 차트<br />
+              캔들 차트 + 거래량 포함 캡처 시 정확도 UP
+            </p>
+          ) : (
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center mt-1 font-mono leading-relaxed">
+              증권앱 보유종목 화면을 캡처해서 올려주세요<br />
+              종목명 · 수량 · 수익률이 보이면 정확도 UP
+            </p>
+          )}
         </div>
       )}
     </motion.div>

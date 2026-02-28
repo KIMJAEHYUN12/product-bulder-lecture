@@ -10,17 +10,28 @@ import {
   Tooltip,
 } from "recharts";
 import { TrendingUp, ShieldAlert, BarChart2, Layers, Target } from "lucide-react";
+import { useTheme } from "next-themes";
 import type { PortfolioScores, Sector } from "@/types";
 
-const SCORE_META: {
+type ScoreMeta = {
   key: keyof PortfolioScores;
   label: string;
   shortLabel: string;
   icon: React.ElementType;
-}[] = [
+};
+
+const SCORE_META_KIM: ScoreMeta[] = [
   { key: "diversification", label: "분산도", shortLabel: "분산", icon: Layers },
   { key: "returns", label: "수익률", shortLabel: "수익", icon: TrendingUp },
   { key: "stability", label: "안정성", shortLabel: "안정", icon: ShieldAlert },
+  { key: "momentum", label: "모멘텀", shortLabel: "모멘텀", icon: Target },
+  { key: "risk_management", label: "리스크 관리", shortLabel: "리스크", icon: BarChart2 },
+];
+
+const SCORE_META_MCR: ScoreMeta[] = [
+  { key: "diversification", label: "채널 신뢰도", shortLabel: "채널", icon: Layers },
+  { key: "returns", label: "추세 강도", shortLabel: "추세", icon: TrendingUp },
+  { key: "stability", label: "패턴 안정성", shortLabel: "패턴", icon: ShieldAlert },
   { key: "momentum", label: "모멘텀", shortLabel: "모멘텀", icon: Target },
   { key: "risk_management", label: "리스크 관리", shortLabel: "리스크", icon: BarChart2 },
 ];
@@ -86,9 +97,14 @@ interface Props {
   analysis: string | null;
   scores: PortfolioScores | null;
   sector: Sector | null;
+  mode?: "kim" | "makalong";
 }
 
-export function AnalysisReport({ analysis, scores, sector }: Props) {
+export function AnalysisReport({ analysis, scores, sector, mode = "kim" }: Props) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme !== "light";
+  const isMcr = mode === "makalong";
+  const SCORE_META = isMcr ? SCORE_META_MCR : SCORE_META_KIM;
   const radarData = scores
     ? SCORE_META.map(({ shortLabel, key }) => ({
         subject: shortLabel,
@@ -122,12 +138,12 @@ export function AnalysisReport({ analysis, scores, sector }: Props) {
           )}
 
           {/* Header */}
-          <div className="relative px-5 py-4 border-b border-white/8">
+          <div className="relative px-5 py-4 border-b border-gray-100 dark:border-white/[0.08]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <BarChart2 size={16} className="text-indigo-400" />
-                <h3 className="font-bold text-white text-sm tracking-wide">
-                  AI 전문 재무 리포트
+                <h3 className="font-bold text-gray-900 dark:text-white text-sm tracking-wide">
+                  {isMcr ? "오비젼 빗각 분석 리포트" : "AI 전문 재무 리포트"}
                 </h3>
               </div>
               {sectorMeta && (
@@ -139,7 +155,7 @@ export function AnalysisReport({ analysis, scores, sector }: Props) {
               )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5 font-mono">
-              오비젼 · 현장직 베테랑 분석
+              {isMcr ? "오비젼 빗각 분석 엔진" : "오비젼 · 현장직 베테랑 분석"}
             </p>
           </div>
 
@@ -147,14 +163,14 @@ export function AnalysisReport({ analysis, scores, sector }: Props) {
           {scores && (
             <div className="relative px-4 pt-4 pb-2">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
-                포트폴리오 건강 지표
+                {isMcr ? "빗각 기술 지표" : "포트폴리오 건강 지표"}
               </p>
               <ResponsiveContainer width="100%" height={190}>
                 <RadarChart
                   data={radarData}
                   margin={{ top: 8, right: 20, bottom: 8, left: 20 }}
                 >
-                  <PolarGrid stroke="#ffffff" strokeOpacity={0.06} />
+                  <PolarGrid stroke={isDark ? "#ffffff" : "#000000"} strokeOpacity={0.06} />
                   <PolarAngleAxis
                     dataKey="subject"
                     tick={{ fontSize: 11, fill: "#6b7280" }}
@@ -172,8 +188,8 @@ export function AnalysisReport({ analysis, scores, sector }: Props) {
                   />
                   <Radar
                     dataKey="value"
-                    stroke="#818cf8"
-                    fill="#818cf8"
+                    stroke={isMcr ? "#3b82f6" : "#818cf8"}
+                    fill={isMcr ? "#3b82f6" : "#818cf8"}
                     fillOpacity={0.2}
                     strokeWidth={1.5}
                   />
@@ -190,7 +206,7 @@ export function AnalysisReport({ analysis, scores, sector }: Props) {
                       <span className="text-xs text-gray-500 w-16 shrink-0">
                         {label}
                       </span>
-                      <div className="flex-1 h-1 rounded-full bg-white/5">
+                      <div className="flex-1 h-1 rounded-full bg-gray-200 dark:bg-white/5">
                         <motion.div
                           className={`h-full rounded-full ${scoreBarColor(v)}`}
                           initial={{ width: 0 }}
@@ -216,16 +232,16 @@ export function AnalysisReport({ analysis, scores, sector }: Props) {
 
           {/* Divider */}
           {scores && analysis && (
-            <div className="mx-5 border-t border-dashed border-white/10 my-3" />
+            <div className="mx-5 border-t border-dashed border-gray-200 dark:border-white/10 my-3" />
           )}
 
           {/* Analysis text */}
           {analysis && (
             <div className="relative px-5 pb-5">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
-                전문가 소견
+                {isMcr ? "빗각 상세 분석" : "전문가 소견"}
               </p>
-              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-mono">
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap font-mono">
                 {analysis}
               </p>
             </div>

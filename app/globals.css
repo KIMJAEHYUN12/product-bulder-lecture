@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 :root {
+  --background: #f9fafb;
+  --foreground: #111827;
+}
+
+.dark {
   --background: #030712;
   --foreground: #f9fafb;
 }
@@ -27,19 +32,33 @@ body {
   animation-play-state: paused;
 }
 
-/* Subtle grid background */
+/* Subtle grid background — light mode */
 .grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Subtle grid background — dark mode */
+.dark .grid-bg {
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 48px 48px;
 }
 
-/* Glassmorphism card */
+/* Glassmorphism card — light mode */
 .glass-card {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 0.75rem;
+}
+
+/* Glassmorphism card — dark mode */
+.dark .glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
