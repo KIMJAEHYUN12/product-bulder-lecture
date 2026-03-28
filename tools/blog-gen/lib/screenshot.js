@@ -401,9 +401,17 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
         if (rect.width === 0 || rect.height === 0) continue;
         const h = table.querySelector('thead')?.textContent || '';
         if (h.includes('날짜') && h.includes('종가')) {
+          // 최근 15행만 남기고 나머지 숨김
+          const rows = table.querySelectorAll('tbody tr');
+          for (let i = 15; i < rows.length; i++) {
+            rows[i].style.display = 'none';
+          }
+          // maxHeight 해제
           const wrapper = table.closest('.overflow-x-auto') || table.closest('.overflow-auto');
           if (wrapper) wrapper.style.maxHeight = 'none';
-          return wrapper || table;
+          // 부모 컨테이너 반환 (제목 "일별 매매동향" + 테이블 포함)
+          const parent = wrapper ? wrapper.parentElement : table.parentElement;
+          return parent || wrapper || table;
         }
       }
       return null;
