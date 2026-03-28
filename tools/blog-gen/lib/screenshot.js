@@ -1,8 +1,8 @@
 /**
  * Step 2: Puppeteer 스크린샷 캡처
  *
- * SimplyStock 종목 페이지 + DART 공시 페이지 캡처.
- * 캡처 타이밍 문제 해결을 위한 대기 로직 포함.
+ * SimplyStock 메인페이지 종목검색 결과 + DART 공시 페이지 캡처.
+ * URL: https://www.simplystock.co.kr/?ticker=005930.KS
  */
 
 const puppeteer = require('puppeteer');
@@ -12,19 +12,16 @@ const { execSync } = require('child_process');
 const sel = require('./utils/selectors');
 
 const VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: 2 };
-const CHART_WAIT = 3000;  // 차트 렌더링 대기(ms)
-const TAB_WAIT = 2500;    // 탭 전환 후 대기(ms)
+const RENDER_WAIT = 4000;  // 차트 렌더링 대기(ms)
+const TAB_WAIT = 3000;     // 탭 전환 후 대기(ms)
 
-/** 시스템 Chrome 경로 감지 (Windows / macOS / Linux) */
+/** 시스템 Chrome 경로 감지 */
 function findChromePath() {
   const candidates = [
     process.env.CHROME_PATH,
-    // Windows
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    // macOS
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    // Linux
     '/usr/bin/chromium-browser',
     '/usr/bin/chromium',
     '/usr/bin/google-chrome-stable',
@@ -36,14 +33,65 @@ function findChromePath() {
   try {
     return execSync('which chromium-browser || which chromium || which google-chrome', { encoding: 'utf-8' }).trim();
   } catch {
-    return null; // Puppeteer 번들 Chrome 사용
+    return null;
   }
 }
 
 // ── 헬퍼 함수 ────────────────────────────────────────────
 
-/** 텍스트로 버튼 클릭 */
-async function clickButtonByText(page, text) {
+/**
+ * 봉 타입 버튼 클릭 (1글자: "일", "주", "월")
+ * "봉" 레이블 바로 뒤에 있는 버튼들 중에서 정확히 매칭
+ */
+async function clickCandleTab(page, tabText) {
+  return page.evaluate((t) => {
+    // "봉" span을 찾고, 그 형제 버튼들 중 매칭
+    const spans = document.querySelectorAll('span');
+    for (const span of spans) {
+      if (span.textContent.trim() === '봉') {
+        const parent = span.parentElement;
+        if (!parent) continue;
+        const buttons = parent.querySelectorAll('button');
+        for (const btn of buttons) {
+          if (btn.textContent.trim() === t) {
+            btn.click();
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }, tabText);
+}
+
+/**
+ * 기간 버튼 클릭 ("1M", "3M" 등)
+ * "조회" 레이블 뒤의 버튼들 중 매칭
+ */
+async function clickPeriodButton(page, periodText) {
+  return page.evaluate((t) => {
+    const spans = document.querySelectorAll('span');
+    for (const span of spans) {
+      if (span.textContent.trim() === '조회') {
+        const parent = span.parentElement;
+        if (!parent) continue;
+        const buttons = parent.querySelectorAll('button');
+        for (const btn of buttons) {
+          if (btn.textContent.trim() === t) {
+            btn.click();
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }, periodText);
+}
+
+/**
+ * 수급 차트 모드 전환 ("합산" / "주체별")
+ */
+async function clickSupplyTab(page, tabText) {
   return page.evaluate((t) => {
     const buttons = document.querySelectorAll('button');
     for (const btn of buttons) {
@@ -53,18 +101,37 @@ async function clickButtonByText(page, text) {
       }
     }
     return false;
-  }, text);
+  }, tabText);
 }
 
-/** 탭 클릭 + 차트 렌더링 대기 */
-async function clickTabAndWait(page, tabText, waitMs = TAB_WAIT) {
-  const clicked = await clickButtonByText(page, tabText);
-  if (!clicked) {
-    console.warn(`버튼 "${tabText}" 을(를) 찾지 못함`);
+/**
+ * 밸류에이션 탭 클릭 ("Forward PER", "Trailing PER", "PBR")
+ * 버튼 안에 span이 있어서 includes로 매칭
+ */
+async function clickValuationTab(page, tabText) {
+  return page.evaluate((t) => {
+    const buttons = document.querySelectorAll('button');
+    for (const btn of buttons) {
+      // span 안의 텍스트도 확인
+      const spans = btn.querySelectorAll('span');
+      for (const span of spans) {
+        if (span.textContent.trim() === t) {
+          btn.click();
+          return true;
+        }
+      }
+      // fallback: 버튼 전체 텍스트에 포함
+      if (btn.textContent.includes(t)) {
+        btn.click();
+        return true;
+      }
+    }
     return false;
-  }
+  }, tabText);
+}
 
-  // MutationObserver로 차트 변경 감지
+/** 차트 렌더링 대기 (canvas 변경 감지 + 타임아웃) */
+async function waitForChartRender(page, waitMs = TAB_WAIT) {
   await page.evaluate(() => {
     return new Promise(resolve => {
       const observer = new MutationObserver(() => {
@@ -75,39 +142,69 @@ async function clickTabAndWait(page, tabText, waitMs = TAB_WAIT) {
       if (target) {
         observer.observe(target, { childList: true, subtree: true, attributes: true });
       }
-      setTimeout(resolve, 3000); // 안전장치
+      setTimeout(resolve, 3000);
     });
   });
-
   await new Promise(r => setTimeout(r, waitMs));
-  return true;
 }
 
-/** 차트 컨테이너 캡처 (canvas 포함 영역) */
-async function captureChartArea(page, outputPath) {
-  // 차트를 감싸는 첫 번째 큰 섹션 찾기
-  const container = await page.evaluateHandle(() => {
-    // canvas를 포함하는 가장 가까운 rounded 컨테이너
+/**
+ * 차트 전체 컨테이너 캡처 (시그널바 + 탭 + 캔들차트 + 수급차트)
+ * StockChartV2의 최외곽 div를 찾아서 캡처
+ */
+async function captureChartContainer(page, outputPath) {
+  const element = await page.evaluateHandle(() => {
+    // StockChartV2: div.w-full.rounded-none.sm:rounded-xl 또는 canvas의 상위 section
+    const container = document.querySelector('div.w-full.rounded-none');
+    if (container) return container;
+    // fallback: canvas를 포함하는 가장 큰 컨테이너
     const canvas = document.querySelector('canvas');
     if (!canvas) return null;
     let el = canvas.parentElement;
-    while (el && !el.classList.toString().includes('rounded')) {
+    while (el && el.tagName !== 'SECTION' && el.tagName !== 'BODY') {
+      if (el.classList.contains('rounded-xl') || el.classList.contains('rounded-none')) break;
       el = el.parentElement;
     }
-    return el || canvas.parentElement?.parentElement?.parentElement;
+    return el;
   });
 
-  if (container.asElement()) {
-    await container.asElement().screenshot({ path: outputPath });
+  if (element.asElement()) {
+    await element.asElement().screenshot({ path: outputPath });
     return true;
   }
 
-  // fallback: 뷰포트 상단 영역 캡처
-  await page.screenshot({
-    path: outputPath,
-    clip: { x: 0, y: 0, width: 1920, height: 900 },
-  });
+  // fallback: 뷰포트 전체
+  await page.screenshot({ path: outputPath, clip: { x: 0, y: 0, width: 1920, height: 1000 } });
   return true;
+}
+
+/**
+ * 수급 차트 영역만 캡처 (InvestorFlowChartV2)
+ */
+async function captureSupplyChart(page, outputPath) {
+  const element = await page.evaluateHandle(() => {
+    // InvestorFlowChartV2: "합산"/"주체별" 버튼 + canvas를 포함하는 rounded-lg border 컨테이너
+    const buttons = document.querySelectorAll('button');
+    for (const btn of buttons) {
+      if (btn.textContent.trim() === '합산' || btn.textContent.trim() === '주체별') {
+        // 이 버튼의 부모 컨테이너를 찾음
+        let el = btn.parentElement;
+        while (el) {
+          if (el.classList.contains('rounded-lg') && el.querySelector('canvas')) {
+            return el;
+          }
+          el = el.parentElement;
+        }
+      }
+    }
+    return null;
+  });
+
+  if (element.asElement()) {
+    await element.asElement().screenshot({ path: outputPath });
+    return true;
+  }
+  return false;
 }
 
 /** 특정 요소 캡처 (스크롤 포함) */
@@ -130,7 +227,7 @@ async function captureElement(page, selector, outputPath) {
 // ── SimplyStock 캡처 시퀀스 ──────────────────────────────
 
 /**
- * SimplyStock 종목 페이지 캡처
+ * SimplyStock 종목 페이지 캡처 (9장)
  * @param {string} stockCode - 6자리 종목코드
  * @param {string} outputDir - 이미지 저장 폴더
  * @param {(msg: string) => void} onProgress
@@ -152,100 +249,187 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
 
   try {
     const page = await browser.newPage();
+    const yahooSymbol = `${stockCode}.KS`;
 
     // ── 1. 종목 페이지 접속 ──
     onProgress('종목 페이지 로딩 중...');
-    await page.goto(`${sel.BASE_URL}/stock/${stockCode}`, {
+    await page.goto(`${sel.BASE_URL}/?ticker=${yahooSymbol}`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
     });
 
-    // 클라이언트 사이드 렌더링 대기: canvas가 나타날 때까지 (최대 20초)
+    // canvas가 나타날 때까지 대기
     onProgress('차트 렌더링 대기 중...');
-    await page.waitForSelector('canvas', { timeout: 20000 }).catch(() => {
+    await page.waitForSelector('canvas', { timeout: 25000 }).catch(() => {
       console.warn('canvas 대기 타임아웃 — 계속 진행');
     });
-    // 차트 데이터 fetch + 렌더링 완료 추가 대기
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise(r => setTimeout(r, RENDER_WAIT));
+
+    // 디버그: 페이지 상태 확인
+    const debugInfo = await page.evaluate(() => {
+      const canvases = document.querySelectorAll('canvas');
+      const buttons = document.querySelectorAll('button');
+      const btnTexts = Array.from(buttons).map(b => b.textContent.trim()).filter(t => t.length <= 5);
+      return {
+        canvasCount: canvases.length,
+        buttonCount: buttons.length,
+        shortButtons: btnTexts.slice(0, 30),
+      };
+    });
+    console.log('페이지 상태:', JSON.stringify(debugInfo));
 
     // ── 2. 월봉 캡처 ──
     onProgress('월봉 캡처 중...');
-    await clickTabAndWait(page, sel.TAB_MONTHLY);
-    // 5Y 기간으로 전환 (월봉은 장기가 좋음)
-    await clickButtonByText(page, sel.PERIOD_5Y);
-    await new Promise(r => setTimeout(r, TAB_WAIT));
+    await clickCandleTab(page, sel.TAB_MONTHLY);
+    await new Promise(r => setTimeout(r, 500));
+    await clickPeriodButton(page, sel.PERIOD_5Y);
+    await waitForChartRender(page);
     const monthlyPath = path.join(imagesDir, '01_월봉_회귀채널.png');
-    await captureChartArea(page, monthlyPath);
+    await captureChartContainer(page, monthlyPath);
     images.push('images/01_월봉_회귀채널.png');
 
     // ── 3. 주봉 캡처 ──
     onProgress('주봉 캡처 중...');
-    await clickTabAndWait(page, sel.TAB_WEEKLY);
-    await clickButtonByText(page, sel.PERIOD_2Y);
-    await new Promise(r => setTimeout(r, TAB_WAIT));
+    await clickCandleTab(page, sel.TAB_WEEKLY);
+    await new Promise(r => setTimeout(r, 500));
+    await clickPeriodButton(page, sel.PERIOD_2Y);
+    await waitForChartRender(page);
     const weeklyPath = path.join(imagesDir, '02_주봉_회귀채널.png');
-    await captureChartArea(page, weeklyPath);
+    await captureChartContainer(page, weeklyPath);
     images.push('images/02_주봉_회귀채널.png');
 
-    // ── 4. 일봉 캡처 (수급 차트 포함) ──
+    // ── 4. 일봉 캡처 (수급 바차트 포함) ──
     onProgress('일봉 캡처 중...');
-    await clickTabAndWait(page, sel.TAB_DAILY);
-    await clickButtonByText(page, sel.PERIOD_6M);
-    await new Promise(r => setTimeout(r, TAB_WAIT));
+    await clickCandleTab(page, sel.TAB_DAILY);
+    await new Promise(r => setTimeout(r, 500));
+    await clickPeriodButton(page, sel.PERIOD_6M);
+    await waitForChartRender(page);
     const dailyPath = path.join(imagesDir, '03_일봉_회귀채널_수급.png');
-    await captureChartArea(page, dailyPath);
+    await captureChartContainer(page, dailyPath);
     images.push('images/03_일봉_회귀채널_수급.png');
 
-    // ── 5. 매매동향 테이블 캡처 ──
-    onProgress('매매동향 캡처 중...');
-    // PC 테이블 펼치기 시도
-    const expandBtn = await page.$('button.w-full.flex.items-center.gap-2.px-4.pt-3');
-    if (expandBtn) {
-      await expandBtn.click();
-      await new Promise(r => setTimeout(r, 1000));
-    }
-    const tablePath = path.join(imagesDir, '05_매매동향_테이블.png');
-    const tableOk = await captureElement(page, 'table.min-w-\\[640px\\]', tablePath);
-    if (tableOk) images.push('images/05_매매동향_테이블.png');
+    // ── 5. 수급 합산 캡처 ──
+    onProgress('수급 합산 캡처 중...');
+    await clickSupplyTab(page, sel.SUPPLY_TAB_BAR);
+    await waitForChartRender(page, 2000);
+    const supplyBarPath = path.join(imagesDir, '04_수급_합산.png');
+    const supplyBarOk = await captureSupplyChart(page, supplyBarPath);
+    if (supplyBarOk) images.push('images/04_수급_합산.png');
 
-    // ── 6. 밸류에이션 페이지 이동 ──
+    // ── 6. 수급 주체별 캡처 ──
+    onProgress('수급 주체별 캡처 중...');
+    await clickSupplyTab(page, sel.SUPPLY_TAB_LINE);
+    await waitForChartRender(page, 2000);
+    const supplyLinePath = path.join(imagesDir, '05_수급_주체별.png');
+    const supplyLineOk = await captureSupplyChart(page, supplyLinePath);
+    if (supplyLineOk) images.push('images/05_수급_주체별.png');
+
+    // ── 7. 매매동향 테이블 캡처 ──
+    onProgress('매매동향 캡처 중...');
+    // PC 테이블 펼치기 (hidden md:block 영역)
+    const tableToggled = await page.evaluate(() => {
+      const buttons = document.querySelectorAll('button');
+      for (const btn of buttons) {
+        const spans = btn.querySelectorAll('span');
+        for (const span of spans) {
+          if (span.textContent.trim() === '일별 매매동향') {
+            btn.click();
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+    if (tableToggled) await new Promise(r => setTimeout(r, 1000));
+
+    const tablePath = path.join(imagesDir, '06_매매동향_테이블.png');
+    // 테이블과 그 부모 컨테이너를 캡처
+    const tableOk = await page.evaluate(() => {
+      const table = document.querySelector('table');
+      if (table) {
+        table.scrollIntoView({ block: 'center', behavior: 'instant' });
+        return true;
+      }
+      return false;
+    });
+    if (tableOk) {
+      await new Promise(r => setTimeout(r, 500));
+      const tableEl = await page.$('table');
+      if (tableEl) {
+        await tableEl.screenshot({ path: tablePath });
+        images.push('images/06_매매동향_테이블.png');
+      }
+    }
+
+    // ── 8. 밸류에이션 페이지 이동 ──
     onProgress('밸류에이션 페이지 이동 중...');
-    await page.goto(`${sel.BASE_URL}/valuation/?ticker=${stockCode}.KS`, {
+    await page.goto(`${sel.BASE_URL}/valuation/?ticker=${yahooSymbol}`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
     });
-    // 밸류에이션 차트 렌더링 대기
     await page.waitForSelector('canvas', { timeout: 20000 }).catch(() => {
       console.warn('밸류에이션 canvas 대기 타임아웃');
     });
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise(r => setTimeout(r, RENDER_WAIT));
 
-    // ── 7. Forward PER 캡처 ──
+    // ── 9. Forward PER 캡처 ──
     onProgress('Forward PER 캡처 중...');
-    await clickTabAndWait(page, sel.VAL_TAB_FORWARD);
-    const forwardPath = path.join(imagesDir, '06_forward_per.png');
-    await captureChartArea(page, forwardPath);
-    images.push('images/06_forward_per.png');
+    await clickValuationTab(page, sel.VAL_TAB_FORWARD);
+    await waitForChartRender(page, 2000);
+    // 밸류에이션 전체 콘텐츠 영역 캡처
+    const forwardPath = path.join(imagesDir, '07_forward_per.png');
+    await captureValuationSection(page, forwardPath);
+    images.push('images/07_forward_per.png');
 
-    // ── 8. Trailing PER 캡처 ──
+    // ── 10. Trailing PER 캡처 ──
     onProgress('Trailing PER 캡처 중...');
-    await clickTabAndWait(page, sel.VAL_TAB_TRAILING);
-    const trailingPath = path.join(imagesDir, '07_trailing_per.png');
-    await captureChartArea(page, trailingPath);
-    images.push('images/07_trailing_per.png');
+    await clickValuationTab(page, sel.VAL_TAB_TRAILING);
+    await waitForChartRender(page, 2000);
+    const trailingPath = path.join(imagesDir, '08_trailing_per.png');
+    await captureValuationSection(page, trailingPath);
+    images.push('images/08_trailing_per.png');
 
-    // ── 9. PBR 캡처 ──
+    // ── 11. PBR 캡처 ──
     onProgress('PBR 캡처 중...');
-    await clickTabAndWait(page, sel.VAL_TAB_PBR);
-    const pbrPath = path.join(imagesDir, '08_pbr.png');
-    await captureChartArea(page, pbrPath);
-    images.push('images/08_pbr.png');
+    await clickValuationTab(page, sel.VAL_TAB_PBR);
+    await waitForChartRender(page, 2000);
+    const pbrPath = path.join(imagesDir, '09_pbr.png');
+    await captureValuationSection(page, pbrPath);
+    images.push('images/09_pbr.png');
 
   } finally {
     await browser.close();
   }
 
   return images;
+}
+
+/**
+ * 밸류에이션 섹션 캡처 (탭 + 차트 + 밴드 구간 + EPS 전체)
+ */
+async function captureValuationSection(page, outputPath) {
+  // 탭 버튼 ~ 차트 ~ 하단 정보까지 전체를 포함하는 main 영역 캡처
+  const element = await page.evaluateHandle(() => {
+    // main 또는 탭+차트를 포함하는 최상위 컨테이너
+    const main = document.querySelector('main');
+    if (main) return main;
+    // fallback: canvas의 상위
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return document.body;
+    let el = canvas.parentElement;
+    while (el && el.tagName !== 'MAIN' && el.tagName !== 'BODY') {
+      el = el.parentElement;
+    }
+    return el || document.body;
+  });
+
+  if (element.asElement()) {
+    await element.asElement().screenshot({ path: outputPath });
+    return true;
+  }
+
+  await page.screenshot({ path: outputPath, fullPage: true });
+  return true;
 }
 
 // ── DART 공시 캡처 ───────────────────────────────────────
@@ -267,10 +451,6 @@ const DART_CAPTURE_TARGETS = {
 
 /**
  * DART 공시 페이지 캡처
- * @param {string} dartUrl - DART 공시 URL
- * @param {string} disclosureType - 공시 유형 (DART_CAPTURE_TARGETS 키)
- * @param {string} outputPath - 저장 경로
- * @returns {Promise<boolean>}
  */
 async function captureDartDisclosure(dartUrl, disclosureType, outputPath, browser) {
   const page = await browser.newPage();
@@ -282,7 +462,6 @@ async function captureDartDisclosure(dartUrl, disclosureType, outputPath, browse
     const target = DART_CAPTURE_TARGETS[disclosureType];
     const keywords = target ? [target.keyword, target.fallback] : [];
 
-    // 키워드로 대상 요소 찾기
     for (const keyword of keywords) {
       const found = await page.evaluate((kw) => {
         const elements = document.querySelectorAll('table, h2, h3, th, td');
@@ -297,8 +476,7 @@ async function captureDartDisclosure(dartUrl, disclosureType, outputPath, browse
       }, keyword);
 
       if (found) {
-        await new Promise(r => setTimeout(r, 1500)); // 스크롤 안정화
-        // 요소 기준 캡처
+        await new Promise(r => setTimeout(r, 1500));
         const box = await page.evaluate((kw) => {
           const elements = document.querySelectorAll('table, h2, h3, th, td');
           for (const el of elements) {
@@ -326,7 +504,6 @@ async function captureDartDisclosure(dartUrl, disclosureType, outputPath, browse
       }
     }
 
-    // fallback: fullPage 캡처
     console.warn(`DART "${disclosureType}" 대상 요소 못 찾음 — 전체 페이지 캡처`);
     await page.screenshot({ path: outputPath, fullPage: true });
     return true;
@@ -341,10 +518,6 @@ async function captureDartDisclosure(dartUrl, disclosureType, outputPath, browse
 
 /**
  * DART 히트 공시들 캡처
- * @param {Array} hits - dart-checker의 hits 배열
- * @param {string} outputDir - 출력 폴더
- * @param {(msg: string) => void} onProgress
- * @returns {Promise<Array>} 캡처 경로가 추가된 hits
  */
 async function captureDartHits(hits, outputDir, onProgress = () => {}) {
   if (!hits || hits.length === 0) return [];
@@ -352,8 +525,10 @@ async function captureDartHits(hits, outputDir, onProgress = () => {}) {
   const dartDir = path.join(outputDir, 'images', 'dart');
   fs.mkdirSync(dartDir, { recursive: true });
 
+  const chromePath = findChromePath();
   const browser = await puppeteer.launch({
     headless: 'new',
+    ...(chromePath ? { executablePath: chromePath } : {}),
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
     defaultViewport: VIEWPORT,
   });
@@ -361,7 +536,7 @@ async function captureDartHits(hits, outputDir, onProgress = () => {}) {
   try {
     for (let i = 0; i < hits.length; i++) {
       const hit = hits[i];
-      const idx = String(i + 9).padStart(2, '0'); // 09부터 시작
+      const idx = String(i + 10).padStart(2, '0'); // 10부터 시작 (09까지는 SimplyStock)
       const filename = `${idx}_${hit.type}_공시.png`;
       const outputPath = path.join(dartDir, filename);
 
