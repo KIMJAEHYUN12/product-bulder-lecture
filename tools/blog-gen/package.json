@@ -1,0 +1,24 @@
+{
+  "name": "blog-gen",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3030",
+    "build": "next build",
+    "start": "next start -p 3030"
+  },
+  "dependencies": {
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "puppeteer": "^23.0.0",
+    "sharp": "^0.33.0",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "firebase-admin": "^13.0.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8.4.0",
+    "autoprefixer": "^10.4.0"
+  }
+}
