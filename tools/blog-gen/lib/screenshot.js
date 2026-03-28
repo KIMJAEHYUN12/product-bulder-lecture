@@ -364,60 +364,48 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
 
     // ── 7. 매매동향 테이블 캡처 ──
     onProgress('매매동향 캡처 중...');
-    // PC용 "일별 매매동향" 토글 클릭 (hidden md:block 영역)
-    await page.evaluate(() => {
-      // PC 영역(md 이상)의 "일별 매매동향" 버튼 찾기
-      const allButtons = document.querySelectorAll('button');
-      for (const btn of allButtons) {
-        const spans = btn.querySelectorAll('span');
-        for (const span of spans) {
-          if (span.textContent.trim() === '일별 매매동향') {
-            btn.click();
-            return true;
-          }
-        }
-        // 버튼 직접 텍스트 체크
-        if (btn.textContent.includes('일별 매매동향')) {
+    // PC용 "일별 매매동향" 토글 클릭 — 보이는(offsetParent) 버튼만 대상
+    const toggleClicked = await page.evaluate(() => {
+      const spans = document.querySelectorAll('span');
+      for (const span of spans) {
+        if (span.textContent.trim() === '일별 매매동향') {
+          const btn = span.closest('button');
+          if (!btn || btn.offsetParent === null) continue; // 숨겨진 모바일 버튼 건너뜀
+          btn.scrollIntoView({ block: 'center', behavior: 'instant' });
           btn.click();
           return true;
         }
       }
       return false;
     });
-    await new Promise(r => setTimeout(r, 1500));
 
-    const tablePath = path.join(imagesDir, '06_매매동향_테이블.png');
-    // 날짜/종가/전일비 등 컬럼이 있는 PC 테이블 찾기
-    const tableFound = await page.evaluate(() => {
-      const tables = document.querySelectorAll('table');
-      for (const table of tables) {
-        const headerText = table.querySelector('thead')?.textContent || '';
-        // 매매동향 테이블: "날짜", "종가", "외국인" 등의 컬럼
-        if (headerText.includes('날짜') && headerText.includes('종가') && headerText.includes('외국인')) {
-          table.scrollIntoView({ block: 'start', behavior: 'instant' });
-          return true;
-        }
-      }
-      return false;
-    });
-    if (tableFound) {
-      await new Promise(r => setTimeout(r, 500));
-      // 정확한 테이블 다시 찾아서 캡처
+    if (toggleClicked) {
+      await new Promise(r => setTimeout(r, 2000)); // 테이블 렌더링 대기
+
+      const tablePath = path.join(imagesDir, '06_매매동향_테이블.png');
       const tableHandle = await page.evaluateHandle(() => {
         const tables = document.querySelectorAll('table');
         for (const table of tables) {
+          if (table.offsetParent === null) continue; // 숨겨진 테이블 건너뜀
           const headerText = table.querySelector('thead')?.textContent || '';
-          if (headerText.includes('날짜') && headerText.includes('종가') && headerText.includes('외국인')) {
-            // 테이블의 부모 컨테이너 (overflow-x-auto wrapper)
-            return table.closest('.overflow-x-auto') || table.closest('.overflow-auto') || table;
+          if (headerText.includes('날짜') && headerText.includes('종가')) {
+            // maxHeight 제한 해제하여 전체 테이블 캡처
+            const wrapper = table.closest('.overflow-x-auto') || table.closest('.overflow-auto');
+            if (wrapper) wrapper.style.maxHeight = 'none';
+            return wrapper || table;
           }
         }
         return null;
       });
       if (tableHandle.asElement()) {
+        await new Promise(r => setTimeout(r, 300));
         await tableHandle.asElement().screenshot({ path: tablePath });
         images.push('images/06_매매동향_테이블.png');
+      } else {
+        console.warn('매매동향 테이블을 찾지 못함');
       }
+    } else {
+      console.warn('일별 매매동향 토글 버튼을 찾지 못함');
     }
 
     // ── 8. 밸류에이션 페이지 이동 ──

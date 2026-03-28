@@ -69,17 +69,20 @@ export async function POST(request) {
             send({ type: 'step_progress', step: 3, message: msg });
           });
 
-          // DART 히트 공시 캡처
+          // DART 히트 공시 캡처 (실패해도 무시 — dart.json 데이터만 있으면 OK)
           if (dartResult.hits.length > 0) {
-            send({ type: 'step_progress', step: 3, message: `히트 ${dartResult.hits.length}건 캡처 중...` });
-            dartResult.hits = await captureDartHits(dartResult.hits, outputDir, (msg) => {
-              send({ type: 'step_progress', step: 3, message: msg });
-            });
-            // DART 캡처 이미지를 images 목록에 추가
-            for (const hit of dartResult.hits) {
-              if (hit.screenshot) images.push(hit.screenshot);
+            try {
+              send({ type: 'step_progress', step: 3, message: `히트 ${dartResult.hits.length}건 캡처 시도...` });
+              dartResult.hits = await captureDartHits(dartResult.hits, outputDir, (msg) => {
+                send({ type: 'step_progress', step: 3, message: msg });
+              });
+              for (const hit of dartResult.hits) {
+                if (hit.screenshot) images.push(hit.screenshot);
+              }
+              send({ type: 'images', files: images });
+            } catch (captureErr) {
+              send({ type: 'step_progress', step: 3, message: `DART 캡처 스킵 (${captureErr.message})` });
             }
-            send({ type: 'images', files: images });
           }
 
           // dart.json 저장
