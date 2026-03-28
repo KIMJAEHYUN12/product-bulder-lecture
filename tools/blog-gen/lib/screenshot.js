@@ -364,13 +364,47 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
 
     // ── 7. 매매동향 테이블 캡처 ──
     onProgress('매매동향 캡처 중...');
-    // PC용 "일별 매매동향" 토글 클릭 — 보이는(offsetParent) 버튼만 대상
+
+    // 디버그: "일별 매매동향" 버튼 탐색 상태
+    const tradeDebug = await page.evaluate(() => {
+      const results = [];
+      const spans = document.querySelectorAll('span');
+      for (const span of spans) {
+        if (span.textContent.includes('매매동향')) {
+          const btn = span.closest('button');
+          const rect = btn ? btn.getBoundingClientRect() : null;
+          results.push({
+            text: span.textContent.trim(),
+            hasBtn: !!btn,
+            w: rect?.width || 0,
+            h: rect?.height || 0,
+          });
+        }
+      }
+      return results;
+    });
+    console.log('매매동향 버튼 탐색:', JSON.stringify(tradeDebug));
+
+    // PC용 "일별 매매동향" 토글 클릭 — getBoundingClientRect로 보이는 버튼만 대상
     const toggleClicked = await page.evaluate(() => {
       const spans = document.querySelectorAll('span');
       for (const span of spans) {
         if (span.textContent.trim() === '일별 매매동향') {
           const btn = span.closest('button');
-          if (!btn || btn.offsetParent === null) continue; // 숨겨진 모바일 버튼 건너뜀
+          if (!btn) continue;
+          const rect = btn.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) continue; // 숨겨진 버튼 건너뜀
+          btn.scrollIntoView({ block: 'center', behavior: 'instant' });
+          btn.click();
+          return true;
+        }
+      }
+      // fallback: 텍스트에 "매매동향"이 포함된 보이는 버튼
+      const buttons = document.querySelectorAll('button');
+      for (const btn of buttons) {
+        if (btn.textContent.includes('매매동향')) {
+          const rect = btn.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) continue;
           btn.scrollIntoView({ block: 'center', behavior: 'instant' });
           btn.click();
           return true;
@@ -378,6 +412,7 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
       }
       return false;
     });
+    console.log('토글 클릭 결과:', toggleClicked);
 
     if (toggleClicked) {
       await new Promise(r => setTimeout(r, 2000)); // 테이블 렌더링 대기
@@ -386,7 +421,8 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
       const tableHandle = await page.evaluateHandle(() => {
         const tables = document.querySelectorAll('table');
         for (const table of tables) {
-          if (table.offsetParent === null) continue; // 숨겨진 테이블 건너뜀
+          const rect = table.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) continue;
           const headerText = table.querySelector('thead')?.textContent || '';
           if (headerText.includes('날짜') && headerText.includes('종가')) {
             // maxHeight 제한 해제하여 전체 테이블 캡처
