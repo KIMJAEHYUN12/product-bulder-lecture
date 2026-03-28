@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import path from 'path';
+import { getStockInfo } from '../../../lib/utils/stock-codes';
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -10,8 +10,6 @@ export async function GET(request) {
   }
 
   try {
-    const projectRoot = path.resolve(process.cwd());
-    const { getStockInfo } = require(path.join(projectRoot, 'lib/utils/stock-codes'));
     const info = getStockInfo(code);
 
     if (!info) {

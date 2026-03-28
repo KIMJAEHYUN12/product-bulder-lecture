@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
+import { getStockName } from '../../../lib/utils/stock-codes';
+import { fetchStockData } from '../../../lib/data-fetcher';
+import { captureSimplyStock, captureDartHits } from '../../../lib/screenshot';
+import { checkDisclosures } from '../../../lib/dart-checker';
+import { generateBlog } from '../../../lib/blog-writer';
 
 export async function POST(request) {
   const { stockCode, mode } = await request.json();
@@ -17,10 +22,8 @@ export async function POST(request) {
       };
 
       // 출력 디렉토리 준비
-      const projectRoot = path.resolve(process.cwd());
-      const { getStockName } = require(path.join(projectRoot, 'lib/utils/stock-codes'));
       const stockName = getStockName(stockCode) || stockCode;
-      const outputDir = path.join(projectRoot, 'output', `${stockCode}_${stockName}`);
+      const outputDir = path.join(process.cwd(), 'output', `${stockCode}_${stockName}`);
       fs.mkdirSync(path.join(outputDir, 'images', 'dart'), { recursive: true });
 
       let stockData = null;
@@ -32,7 +35,6 @@ export async function POST(request) {
         // ── Step 1: 데이터 추출 ──
         send({ type: 'step_start', step: 1, message: '데이터 추출 중...' });
         try {
-          const { fetchStockData } = require(path.join(projectRoot, 'lib/data-fetcher'));
           stockData = await fetchStockData(stockCode, (msg) => {
             send({ type: 'step_progress', step: 1, message: msg });
           });
@@ -50,7 +52,6 @@ export async function POST(request) {
         // ── Step 2: 스크린샷 캡처 ──
         send({ type: 'step_start', step: 2, message: '캡처 준비 중...' });
         try {
-          const { captureSimplyStock } = require(path.join(projectRoot, 'lib/screenshot'));
           images = await captureSimplyStock(stockCode, outputDir, (msg) => {
             send({ type: 'step_progress', step: 2, message: msg });
           });
@@ -64,7 +65,6 @@ export async function POST(request) {
         // ── Step 3: DART 공시 체크 ──
         send({ type: 'step_start', step: 3, message: '공시 조회 중...' });
         try {
-          const { checkDisclosures } = require(path.join(projectRoot, 'lib/dart-checker'));
           dartResult = await checkDisclosures(stockCode, (msg) => {
             send({ type: 'step_progress', step: 3, message: msg });
           });
@@ -72,7 +72,6 @@ export async function POST(request) {
           // DART 히트 공시 캡처
           if (dartResult.hits.length > 0) {
             send({ type: 'step_progress', step: 3, message: `히트 ${dartResult.hits.length}건 캡처 중...` });
-            const { captureDartHits } = require(path.join(projectRoot, 'lib/screenshot'));
             dartResult.hits = await captureDartHits(dartResult.hits, outputDir, (msg) => {
               send({ type: 'step_progress', step: 3, message: msg });
             });
@@ -100,7 +99,6 @@ export async function POST(request) {
         if (mode !== 'data') {
           send({ type: 'step_start', step: 4, message: '글 생성 중...' });
           try {
-            const { generateBlog } = require(path.join(projectRoot, 'lib/blog-writer'));
             markdown = await generateBlog(stockData, dartResult, images, mode, (msg) => {
               send({ type: 'step_progress', step: 4, message: msg });
             });

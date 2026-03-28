@@ -6,31 +6,12 @@
  * 영업정지, 유상증자/전환사채, 소송, 최대주주변경, 감사의견
  */
 
-const path = require('path');
-const fs = require('fs');
+const corpCodesData = require('../data/dartCorpCodes.json');
 
 const DART_API_URL = 'https://opendart.fss.or.kr/api';
 
-// ── DART 기업 고유번호 매핑 ──────────────────────────────
-
-let _corpCodes = null;
-
-function loadCorpCodes() {
-  if (_corpCodes) return _corpCodes;
-  const filePath = path.resolve(__dirname, '../../../functions/data/dartCorpCodes.json');
-  try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    _corpCodes = JSON.parse(raw);
-    return _corpCodes;
-  } catch (err) {
-    console.error('dartCorpCodes.json 로드 실패:', err.message);
-    return {};
-  }
-}
-
 function getCorpCode(stockCode) {
-  const codes = loadCorpCodes();
-  return codes[stockCode] || null;
+  return corpCodesData[stockCode] || null;
 }
 
 // ── 공시 유형별 필터 키워드 ──────────────────────────────
