@@ -171,8 +171,8 @@ async function captureChartOnly(page, outputPath) {
       x: Math.max(0, containerRect.x),
       y: Math.max(0, containerRect.y),
       width: containerRect.width,
-      // 컨테이너 상단 ~ 캔들차트 하단 + 약간의 여백
-      height: canvasRect.bottom - containerRect.y + 10,
+      // 컨테이너 상단 ~ 캔들차트 하단 + 날짜축 여백
+      height: canvasRect.bottom - containerRect.y + 40,
     };
   });
 
@@ -405,6 +405,14 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
     await page.click('body');
     await new Promise(r => setTimeout(r, 500));
 
+    // 뷰포트를 확장하여 스크롤 없이 전체 콘텐츠 표시
+    await page.setViewport({
+      width: VIEWPORT.width,
+      height: 4000,
+      deviceScaleFactor: VIEWPORT.deviceScaleFactor,
+    });
+    await new Promise(r => setTimeout(r, 1500));
+
     // ── 9. Forward PER 캡처 ──
     onProgress('Forward PER 캡처 중...');
     await clickValuationTab(page, sel.VAL_TAB_FORWARD);
@@ -439,32 +447,54 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
 
 /**
  * 밸류에이션 섹션 캡처 (탭 + 차트 + 밴드 구간 + EPS)
- * 검색바는 제외하고 탭 버튼부터 하단까지 캡처
+ * main(max-w-3xl) 기준으로 좌우 여백 최소화,
+ * 탭 버튼 ~ 마지막 카드까지만 캡처.
+ * 호출 전 뷰포트를 충분히 확장해둘 것 (height: 4000).
  */
 async function captureValuationSection(page, outputPath) {
   const clipBox = await page.evaluate(() => {
-    // Forward PER / Trailing PER / PBR 탭 버튼 그룹을 찾음
-    const tabContainer = document.querySelector('div.flex.gap-1.rounded-lg.border.p-1');
+    const main = document.querySelector('main');
+    if (!main) return null;
+    const mainRect = main.getBoundingClientRect();
+
+    // 탭 버튼의 부모 컨테이너 찾기 (Forward PER / Trailing PER / PBR 텍스트로 탐색)
+    let tabContainer = null;
+    const buttons = main.querySelectorAll('button');
+    for (const btn of buttons) {
+      const spans = btn.querySelectorAll('span');
+      for (const span of spans) {
+        const t = span.textContent.trim();
+        if (t === 'Forward PER' || t === 'Trailing PER' || t === 'PBR') {
+          tabContainer = btn.parentElement;
+          break;
+        }
+      }
+      if (tabContainer) break;
+    }
+
     if (!tabContainer) {
       // fallback: main 전체
-      const main = document.querySelector('main');
-      if (main) {
-        const r = main.getBoundingClientRect();
-        return { x: r.x, y: r.y, width: r.width, height: r.height };
-      }
-      return null;
+      return { x: mainRect.left, y: mainRect.top, width: mainRect.width, height: mainRect.height };
     }
 
     const tabRect = tabContainer.getBoundingClientRect();
-    // 페이지 전체 높이에서 탭 상단부터 끝까지
-    const bodyHeight = document.body.scrollHeight;
-    const bottomY = Math.min(bodyHeight, tabRect.top + 1200); // 최대 1200px
+
+    // 탭의 부모 = results container (mt-4 space-y-4)
+    // 그 안의 마지막 직계 자식의 하단이 콘텐츠 끝
+    const resultsContainer = tabContainer.parentElement;
+    let bottomY = tabRect.bottom + 800; // fallback
+    if (resultsContainer) {
+      const children = resultsContainer.querySelectorAll(':scope > div');
+      if (children.length > 0) {
+        bottomY = children[children.length - 1].getBoundingClientRect().bottom;
+      }
+    }
 
     return {
-      x: 0,
-      y: Math.max(0, tabRect.top - 10), // 탭 위 약간의 여백
-      width: Math.min(document.body.scrollWidth, 1920),
-      height: bottomY - tabRect.top + 20,
+      x: Math.max(0, mainRect.left - 8),
+      y: Math.max(0, tabRect.top - 8),
+      width: Math.min(mainRect.width + 16, 1920),
+      height: bottomY - tabRect.top + 24,
     };
   });
 
