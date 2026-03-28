@@ -40,6 +40,33 @@ function findChromePath() {
 // ── 헬퍼 함수 ────────────────────────────────────────────
 
 /**
+ * 공지 배너 / 팝업 숨기기
+ * AnnounceBanner (border-indigo-500) + PushNotificationBanner 등
+ */
+async function dismissBanners(page) {
+  await page.evaluate(() => {
+    // 1. aria-label="닫기" 버튼 클릭 (AnnounceBanner의 X 버튼)
+    document.querySelectorAll('button[aria-label="닫기"]').forEach(btn => {
+      btn.click();
+    });
+    // 2. border-indigo-500 배너 숨김 (fallback)
+    document.querySelectorAll('.border-indigo-500').forEach(el => {
+      const wrapper = el.closest('.mx-auto');
+      if (wrapper) wrapper.style.display = 'none';
+      else el.style.display = 'none';
+    });
+    // 3. fixed/sticky 하단 배너 숨김
+    document.querySelectorAll('[class*="fixed"], [class*="sticky"]').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom > window.innerHeight - 100 && rect.height < 200) {
+        el.style.display = 'none';
+      }
+    });
+  });
+  await new Promise(r => setTimeout(r, 300));
+}
+
+/**
  * 봉 타입 버튼 클릭 (1글자: "일", "주", "월")
  * "봉" 레이블 바로 뒤에 있는 버튼들 중에서 정확히 매칭
  */
@@ -273,6 +300,9 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
     });
     await new Promise(r => setTimeout(r, RENDER_WAIT));
 
+    // 공지 배너 / 팝업 숨기기
+    await dismissBanners(page);
+
     // 디버그: 페이지 상태 확인
     const debugInfo = await page.evaluate(() => {
       const canvases = document.querySelectorAll('canvas');
@@ -401,9 +431,10 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
     });
     await new Promise(r => setTimeout(r, RENDER_WAIT));
 
-    // 검색 드롭다운 닫기: body 빈 영역 클릭
+    // 검색 드롭다운 닫기 + 공지 배너 숨기기
     await page.click('body');
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 300));
+    await dismissBanners(page);
 
     // 뷰포트를 확장하여 스크롤 없이 전체 콘텐츠 표시
     await page.setViewport({
