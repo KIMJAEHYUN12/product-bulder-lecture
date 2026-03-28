@@ -365,83 +365,55 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
     // ── 7. 매매동향 테이블 캡처 ──
     onProgress('매매동향 캡처 중...');
 
-    // 디버그: "일별 매매동향" 버튼 탐색 상태
-    const tradeDebug = await page.evaluate(() => {
-      const results = [];
-      const spans = document.querySelectorAll('span');
-      for (const span of spans) {
-        if (span.textContent.includes('매매동향')) {
-          const btn = span.closest('button');
-          const rect = btn ? btn.getBoundingClientRect() : null;
-          results.push({
-            text: span.textContent.trim(),
-            hasBtn: !!btn,
-            w: rect?.width || 0,
-            h: rect?.height || 0,
-          });
-        }
-      }
-      return results;
-    });
-    console.log('매매동향 버튼 탐색:', JSON.stringify(tradeDebug));
-
-    // PC용 "일별 매매동향" 토글 클릭 — getBoundingClientRect로 보이는 버튼만 대상
-    const toggleClicked = await page.evaluate(() => {
-      const spans = document.querySelectorAll('span');
-      for (const span of spans) {
-        if (span.textContent.trim() === '일별 매매동향') {
-          const btn = span.closest('button');
-          if (!btn) continue;
-          const rect = btn.getBoundingClientRect();
-          if (rect.width === 0 || rect.height === 0) continue; // 숨겨진 버튼 건너뜀
-          btn.scrollIntoView({ block: 'center', behavior: 'instant' });
-          btn.click();
-          return true;
-        }
-      }
-      // fallback: 텍스트에 "매매동향"이 포함된 보이는 버튼
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if (btn.textContent.includes('매매동향')) {
-          const rect = btn.getBoundingClientRect();
-          if (rect.width === 0 || rect.height === 0) continue;
-          btn.scrollIntoView({ block: 'center', behavior: 'instant' });
-          btn.click();
-          return true;
-        }
+    // 테이블이 이미 DOM에 있는지 확인 (showDailyDetail이 이미 true일 수 있음)
+    let tradeTableVisible = await page.evaluate(() => {
+      const tables = document.querySelectorAll('table');
+      for (const table of tables) {
+        const rect = table.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        const h = table.querySelector('thead')?.textContent || '';
+        if (h.includes('날짜') && h.includes('종가')) return true;
       }
       return false;
     });
-    console.log('토글 클릭 결과:', toggleClicked);
 
-    if (toggleClicked) {
-      await new Promise(r => setTimeout(r, 2000)); // 테이블 렌더링 대기
-
-      const tablePath = path.join(imagesDir, '06_매매동향_테이블.png');
-      const tableHandle = await page.evaluateHandle(() => {
-        const tables = document.querySelectorAll('table');
-        for (const table of tables) {
-          const rect = table.getBoundingClientRect();
-          if (rect.width === 0 || rect.height === 0) continue;
-          const headerText = table.querySelector('thead')?.textContent || '';
-          if (headerText.includes('날짜') && headerText.includes('종가')) {
-            // maxHeight 제한 해제하여 전체 테이블 캡처
-            const wrapper = table.closest('.overflow-x-auto') || table.closest('.overflow-auto');
-            if (wrapper) wrapper.style.maxHeight = 'none';
-            return wrapper || table;
+    if (!tradeTableVisible) {
+      // 테이블이 없으면 토글 클릭으로 열기
+      await page.evaluate(() => {
+        const spans = document.querySelectorAll('span');
+        for (const span of spans) {
+          if (span.textContent.trim() === '일별 매매동향') {
+            const btn = span.closest('button');
+            if (!btn) continue;
+            const rect = btn.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) { btn.click(); return; }
           }
         }
-        return null;
       });
-      if (tableHandle.asElement()) {
-        await new Promise(r => setTimeout(r, 300));
-        await tableHandle.asElement().screenshot({ path: tablePath });
-        images.push('images/06_매매동향_테이블.png');
-      } else {
-        console.warn('매매동향 테이블을 찾지 못함');
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    const tablePath = path.join(imagesDir, '06_매매동향_테이블.png');
+    const tableHandle = await page.evaluateHandle(() => {
+      const tables = document.querySelectorAll('table');
+      for (const table of tables) {
+        const rect = table.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        const h = table.querySelector('thead')?.textContent || '';
+        if (h.includes('날짜') && h.includes('종가')) {
+          const wrapper = table.closest('.overflow-x-auto') || table.closest('.overflow-auto');
+          if (wrapper) wrapper.style.maxHeight = 'none';
+          return wrapper || table;
+        }
       }
+      return null;
+    });
+    if (tableHandle.asElement()) {
+      await new Promise(r => setTimeout(r, 300));
+      await tableHandle.asElement().screenshot({ path: tablePath });
+      images.push('images/06_매매동향_테이블.png');
     } else {
-      console.warn('일별 매매동향 토글 버튼을 찾지 못함');
+      console.warn('매매동향 테이블 캡처 실패');
     }
 
     // ── 8. 밸류에이션 페이지 이동 ──
