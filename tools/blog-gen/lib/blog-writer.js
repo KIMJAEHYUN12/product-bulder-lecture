@@ -199,7 +199,7 @@ function buildUserPrompt(data, dart, images) {
   }
 
   // 밸류에이션
-  if (data.valuation) {
+  if (data.valuation && data.valuation.currentPer != null) {
     const v = data.valuation;
     sections.push('\n## 밸류에이션 데이터');
     if (v.currentPer != null) sections.push(`현재 PER: ${v.currentPer.toFixed(2)}`);
@@ -211,12 +211,32 @@ function buildUserPrompt(data, dart, images) {
       sections.push(`PER 중앙값: ${v.perBands.median?.toFixed(1)}`);
     }
     if (v.latestEps != null) sections.push(`최근 EPS: ${v.latestEps.toLocaleString()}원`);
+  } else {
+    sections.push('\n## 밸류에이션 데이터');
+    sections.push('⚠️ 밸류에이션 데이터 없음 — 이 종목은 PER/PBR 분석 섹션을 생략할 것. 데이터 없이 지어내지 마라.');
   }
 
   // DART 공시
-  if (dart) {
+  if (dart && dart.hits?.length > 0) {
+    sections.push('\n## DART 공시 — 히트 항목 (반드시 본문에 반영할 것)');
+    for (const hit of dart.hits) {
+      sections.push(`- [${hit.type}] ${hit.report_nm} (${hit.rcept_dt})`);
+      sections.push(`  URL: ${hit.url}`);
+      if (hit.summary) sections.push(`  요약: ${hit.summary}`);
+      sections.push(`  → 이 공시를 본문 "4단계 — 공시/리스크"에서 긍정/부정 양면 해석할 것`);
+    }
+    if (dart.clean?.length > 0) {
+      sections.push(`\n클린 항목 (특이사항 없음): ${dart.clean.join(', ')}`);
+    }
+  } else if (dart) {
     sections.push('\n## DART 공시 체크 결과');
-    sections.push(JSON.stringify(dart, null, 2));
+    sections.push('히트 없음 — 모든 항목 클린. 공시/리스크 섹션 간략하게 "특이사항 없음" 처리.');
+    if (dart.clean?.length > 0) {
+      sections.push(`클린 항목: ${dart.clean.join(', ')}`);
+    }
+    if (dart.error) {
+      sections.push(`참고: ${dart.error}`);
+    }
   }
 
   // 이미지 파일 목록
@@ -227,8 +247,12 @@ function buildUserPrompt(data, dart, images) {
     });
   }
 
-  sections.push('\n위 데이터를 기반으로 SimplyStock 블로그 종목 분석 글을 작성해주세요.');
-  sections.push('포맷은 기존 블로그 스타일(작성 가이드 + 📸 마커 + 🔴 핵심문장 + 4열 양면 테이블 + 발행 체크리스트)을 따르세요.');
+  sections.push('\n---');
+  sections.push('위 데이터를 기반으로 SimplyStock 블로그 종목 분석 글을 작성해주세요.');
+  sections.push('⚠️ 중요: 위에 제공된 데이터만 사용할 것. 데이터에 없는 수치를 지어내지 마라.');
+  sections.push('⚠️ 밸류에이션 데이터가 "없음"이면 PER/PBR 분석 섹션을 완전히 생략하라.');
+  sections.push('⚠️ DART 히트 항목이 있으면 반드시 본문 "공시/리스크" 섹션에서 다뤄라.');
+  sections.push('포맷은 시스템 프롬프트의 "글 구조 상세"를 따르세요.');
 
   return sections.join('\n');
 }
@@ -250,6 +274,11 @@ async function generateBlog(data, dart, images, mode = 'sonnet', onProgress = ()
 
   const model = MODEL_MAP[mode] || MODEL_MAP.sonnet;
   const userPrompt = buildUserPrompt(data, dart, images);
+
+  // 디버그: API에 전달되는 유저 프롬프트 출력
+  console.log('=== blog-writer userPrompt ===');
+  console.log(userPrompt);
+  console.log('=== end userPrompt ===');
 
   onProgress(`${mode} 모델로 글 생성 중...`);
 
