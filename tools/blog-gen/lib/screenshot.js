@@ -149,32 +149,40 @@ async function waitForChartRender(page, waitMs = TAB_WAIT) {
 }
 
 /**
- * 차트 전체 컨테이너 캡처 (시그널바 + 탭 + 캔들차트 + 수급차트)
- * StockChartV2의 최외곽 div를 찾아서 캡처
+ * 캔들차트 영역만 캡처 (시그널바 + 탭 + 캔들차트 + 회귀채널)
+ * 수급 차트와 매매동향 테이블은 제외
  */
-async function captureChartContainer(page, outputPath) {
-  const element = await page.evaluateHandle(() => {
-    // StockChartV2: div.w-full.rounded-none.sm:rounded-xl 또는 canvas의 상위 section
+async function captureChartOnly(page, outputPath) {
+  const clipBox = await page.evaluate(() => {
     const container = document.querySelector('div.w-full.rounded-none');
-    if (container) return container;
-    // fallback: canvas를 포함하는 가장 큰 컨테이너
-    const canvas = document.querySelector('canvas');
-    if (!canvas) return null;
-    let el = canvas.parentElement;
-    while (el && el.tagName !== 'SECTION' && el.tagName !== 'BODY') {
-      if (el.classList.contains('rounded-xl') || el.classList.contains('rounded-none')) break;
-      el = el.parentElement;
-    }
-    return el;
+    if (!container) return null;
+    const containerRect = container.getBoundingClientRect();
+
+    // 첫 번째 canvas = 캔들차트 (priceContainerRef)
+    const canvases = container.querySelectorAll('canvas');
+    if (canvases.length === 0) return null;
+    const firstCanvas = canvases[0];
+
+    // canvas의 부모 div (priceContainerRef.w-full)의 하단까지 캡처
+    const canvasParent = firstCanvas.parentElement;
+    const canvasRect = canvasParent ? canvasParent.getBoundingClientRect() : firstCanvas.getBoundingClientRect();
+
+    return {
+      x: Math.max(0, containerRect.x),
+      y: Math.max(0, containerRect.y),
+      width: containerRect.width,
+      // 컨테이너 상단 ~ 캔들차트 하단 + 약간의 여백
+      height: canvasRect.bottom - containerRect.y + 10,
+    };
   });
 
-  if (element.asElement()) {
-    await element.asElement().screenshot({ path: outputPath });
+  if (clipBox && clipBox.width > 0 && clipBox.height > 0) {
+    await page.screenshot({ path: outputPath, clip: clipBox });
     return true;
   }
 
-  // fallback: 뷰포트 전체
-  await page.screenshot({ path: outputPath, clip: { x: 0, y: 0, width: 1920, height: 1000 } });
+  // fallback: 뷰포트 상단
+  await page.screenshot({ path: outputPath, clip: { x: 0, y: 0, width: 1920, height: 800 } });
   return true;
 }
 
@@ -285,7 +293,7 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
     await clickPeriodButton(page, sel.PERIOD_5Y);
     await waitForChartRender(page);
     const monthlyPath = path.join(imagesDir, '01_월봉_회귀채널.png');
-    await captureChartContainer(page, monthlyPath);
+    await captureChartOnly(page, monthlyPath);
     images.push('images/01_월봉_회귀채널.png');
 
     // ── 3. 주봉 캡처 ──
@@ -295,7 +303,7 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
     await clickPeriodButton(page, sel.PERIOD_2Y);
     await waitForChartRender(page);
     const weeklyPath = path.join(imagesDir, '02_주봉_회귀채널.png');
-    await captureChartContainer(page, weeklyPath);
+    await captureChartOnly(page, weeklyPath);
     images.push('images/02_주봉_회귀채널.png');
 
     // ── 4. 일봉 캡처 (수급 바차트 포함) ──
@@ -305,7 +313,7 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
     await clickPeriodButton(page, sel.PERIOD_6M);
     await waitForChartRender(page);
     const dailyPath = path.join(imagesDir, '03_일봉_회귀채널_수급.png');
-    await captureChartContainer(page, dailyPath);
+    await captureChartOnly(page, dailyPath);
     images.push('images/03_일봉_회귀채널_수급.png');
 
     // ── 5. 수급 합산 캡처 ──
@@ -326,10 +334,11 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
 
     // ── 7. 매매동향 테이블 캡처 ──
     onProgress('매매동향 캡처 중...');
-    // PC 테이블 펼치기 (hidden md:block 영역)
-    const tableToggled = await page.evaluate(() => {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
+    // PC용 "일별 매매동향" 토글 클릭 (hidden md:block 영역)
+    await page.evaluate(() => {
+      // PC 영역(md 이상)의 "일별 매매동향" 버튼 찾기
+      const allButtons = document.querySelectorAll('button');
+      for (const btn of allButtons) {
         const spans = btn.querySelectorAll('span');
         for (const span of spans) {
           if (span.textContent.trim() === '일별 매매동향') {
@@ -337,26 +346,46 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
             return true;
           }
         }
+        // 버튼 직접 텍스트 체크
+        if (btn.textContent.includes('일별 매매동향')) {
+          btn.click();
+          return true;
+        }
       }
       return false;
     });
-    if (tableToggled) await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1500));
 
     const tablePath = path.join(imagesDir, '06_매매동향_테이블.png');
-    // 테이블과 그 부모 컨테이너를 캡처
-    const tableOk = await page.evaluate(() => {
-      const table = document.querySelector('table');
-      if (table) {
-        table.scrollIntoView({ block: 'center', behavior: 'instant' });
-        return true;
+    // 날짜/종가/전일비 등 컬럼이 있는 PC 테이블 찾기
+    const tableFound = await page.evaluate(() => {
+      const tables = document.querySelectorAll('table');
+      for (const table of tables) {
+        const headerText = table.querySelector('thead')?.textContent || '';
+        // 매매동향 테이블: "날짜", "종가", "외국인" 등의 컬럼
+        if (headerText.includes('날짜') && headerText.includes('종가') && headerText.includes('외국인')) {
+          table.scrollIntoView({ block: 'start', behavior: 'instant' });
+          return true;
+        }
       }
       return false;
     });
-    if (tableOk) {
+    if (tableFound) {
       await new Promise(r => setTimeout(r, 500));
-      const tableEl = await page.$('table');
-      if (tableEl) {
-        await tableEl.screenshot({ path: tablePath });
+      // 정확한 테이블 다시 찾아서 캡처
+      const tableHandle = await page.evaluateHandle(() => {
+        const tables = document.querySelectorAll('table');
+        for (const table of tables) {
+          const headerText = table.querySelector('thead')?.textContent || '';
+          if (headerText.includes('날짜') && headerText.includes('종가') && headerText.includes('외국인')) {
+            // 테이블의 부모 컨테이너 (overflow-x-auto wrapper)
+            return table.closest('.overflow-x-auto') || table.closest('.overflow-auto') || table;
+          }
+        }
+        return null;
+      });
+      if (tableHandle.asElement()) {
+        await tableHandle.asElement().screenshot({ path: tablePath });
         images.push('images/06_매매동향_테이블.png');
       }
     }
@@ -371,6 +400,10 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
       console.warn('밸류에이션 canvas 대기 타임아웃');
     });
     await new Promise(r => setTimeout(r, RENDER_WAIT));
+
+    // 검색 드롭다운 닫기: body 빈 영역 클릭
+    await page.click('body');
+    await new Promise(r => setTimeout(r, 500));
 
     // ── 9. Forward PER 캡처 ──
     onProgress('Forward PER 캡처 중...');
@@ -405,26 +438,38 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
 }
 
 /**
- * 밸류에이션 섹션 캡처 (탭 + 차트 + 밴드 구간 + EPS 전체)
+ * 밸류에이션 섹션 캡처 (탭 + 차트 + 밴드 구간 + EPS)
+ * 검색바는 제외하고 탭 버튼부터 하단까지 캡처
  */
 async function captureValuationSection(page, outputPath) {
-  // 탭 버튼 ~ 차트 ~ 하단 정보까지 전체를 포함하는 main 영역 캡처
-  const element = await page.evaluateHandle(() => {
-    // main 또는 탭+차트를 포함하는 최상위 컨테이너
-    const main = document.querySelector('main');
-    if (main) return main;
-    // fallback: canvas의 상위
-    const canvas = document.querySelector('canvas');
-    if (!canvas) return document.body;
-    let el = canvas.parentElement;
-    while (el && el.tagName !== 'MAIN' && el.tagName !== 'BODY') {
-      el = el.parentElement;
+  const clipBox = await page.evaluate(() => {
+    // Forward PER / Trailing PER / PBR 탭 버튼 그룹을 찾음
+    const tabContainer = document.querySelector('div.flex.gap-1.rounded-lg.border.p-1');
+    if (!tabContainer) {
+      // fallback: main 전체
+      const main = document.querySelector('main');
+      if (main) {
+        const r = main.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }
+      return null;
     }
-    return el || document.body;
+
+    const tabRect = tabContainer.getBoundingClientRect();
+    // 페이지 전체 높이에서 탭 상단부터 끝까지
+    const bodyHeight = document.body.scrollHeight;
+    const bottomY = Math.min(bodyHeight, tabRect.top + 1200); // 최대 1200px
+
+    return {
+      x: 0,
+      y: Math.max(0, tabRect.top - 10), // 탭 위 약간의 여백
+      width: Math.min(document.body.scrollWidth, 1920),
+      height: bottomY - tabRect.top + 20,
+    };
   });
 
-  if (element.asElement()) {
-    await element.asElement().screenshot({ path: outputPath });
+  if (clipBox && clipBox.width > 0 && clipBox.height > 0) {
+    await page.screenshot({ path: outputPath, clip: clipBox });
     return true;
   }
 
