@@ -11,7 +11,7 @@ const path = require('path');
 // ── 시스템 프롬프트: prompts/blog-format.txt에서 로드 ───────
 
 function loadSystemPrompt() {
-  const filePath = path.join(__dirname, '..', 'prompts', 'blog-format.txt');
+  const filePath = path.join(process.cwd(), 'prompts', 'blog-format.txt');
   return fs.readFileSync(filePath, 'utf-8');
 }
 
