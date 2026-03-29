@@ -544,82 +544,162 @@ async function captureValuationSection(page, outputPath) {
 
 // ── DART 공시 캡처 ───────────────────────────────────────
 
-/** DART 공시 유형별 캡처 키워드 */
+/** DART 공시 유형별 캡처 키워드 (우선순위 순) */
 const DART_CAPTURE_TARGETS = {
-  '블록딜': { keyword: '거래내역', fallback: '주식등의대량보유' },
-  '임원매매': { keyword: '거래계획', fallback: '특정증권등' },
-  '신규시설투자': { keyword: '투자내역', fallback: '투자금액' },
-  '영업정지': { keyword: '영업정지금액', fallback: '영업정지' },
-  '자기주식': { keyword: '취득(처분)예정주식수', fallback: '자기주식' },
-  '대량보유': { keyword: '요약정보', fallback: '보유주식' },
-  '단일판매공급': { keyword: '계약내용', fallback: '계약금액' },
-  '소송': { keyword: '소송가액', fallback: '소송내용' },
-  '유상증자': { keyword: '발행주식수', fallback: '증자방식' },
-  '최대주주변경': { keyword: '변경후', fallback: '최대주주' },
-  '감사의견': { keyword: '감사의견', fallback: '의견종류' },
+  '임원매매': ['특정증권등의 소유상황', '거래내역', '거래계획', '특정증권등'],
+  '대량보유': ['보유주식등의 수', '보유비율', '요약정보', '보유주식'],
+  '영업정지': ['영업정지', '중단사유', '영업정지금액'],
+  '감사의견': ['감사의견', '재무상태표', '손익계산서', '의견종류'],
+  '신규시설투자': ['투자내역', '투자금액'],
+  '자기주식': ['취득', '처분', '자기주식'],
+  '단일판매공급': ['계약내역', '계약금액'],
+  '유상증자': ['발행주식', '조달금액', '증자방식'],
+  '소송': ['소송내용', '소송가액'],
+  '최대주주변경': ['변경내역', '최대주주', '변경후'],
+  '블록딜': ['거래내역', '주식등의대량보유'],
 };
 
 /**
- * DART 공시 페이지 캡처
+ * DART 본문 iframe(또는 frame) 찾기
+ * DART 공시 페이지는 본문이 iframe 안에 있음
+ */
+async function findDartContentFrame(page) {
+  // 1. iframe#ifrm 또는 iframe 내에서 table이 있는 프레임 찾기
+  const frames = page.frames();
+  for (const frame of frames) {
+    if (frame === page.mainFrame()) continue;
+    try {
+      const hasTable = await frame.evaluate(() => {
+        return document.querySelectorAll('table').length > 0;
+      });
+      if (hasTable) return frame;
+    } catch {
+      // cross-origin frame 등 무시
+    }
+  }
+  // iframe이 없으면 메인 프레임 반환
+  return page.mainFrame();
+}
+
+/**
+ * 프레임 내에서 키워드로 핵심 테이블 찾아 element handle 반환
+ */
+async function findTargetTable(frame, keywords) {
+  for (const keyword of keywords) {
+    const handle = await frame.evaluateHandle((kw) => {
+      const candidates = document.querySelectorAll('th, td, caption, h3, h4, p, span');
+      for (const node of candidates) {
+        if (!node.textContent.includes(kw)) continue;
+        // 가장 가까운 <table> 부모 찾기
+        const table = node.closest('table');
+        if (table) return table;
+        // table이 아니면 바로 다음 형제에서 table 찾기
+        let sibling = node.parentElement?.nextElementSibling;
+        while (sibling) {
+          if (sibling.tagName === 'TABLE') return sibling;
+          const inner = sibling.querySelector('table');
+          if (inner) return inner;
+          sibling = sibling.nextElementSibling;
+        }
+        return node.parentElement;
+      }
+      return null;
+    }, keyword);
+
+    const el = handle.asElement();
+    if (el) {
+      // 요소 크기 확인
+      const box = await el.boundingBox();
+      if (box && box.width > 50 && box.height > 20) {
+        console.log(`  DART 키워드 "${keyword}" → 요소 발견 (${Math.round(box.width)}x${Math.round(box.height)})`);
+        return el;
+      }
+    }
+    handle.dispose();
+  }
+  return null;
+}
+
+/**
+ * DART 공시 페이지 캡처 — iframe 대응 + element.screenshot()
  */
 async function captureDartDisclosure(dartUrl, disclosureType, outputPath, browser) {
   const page = await browser.newPage();
 
   try {
+    console.log(`  DART 접속: ${disclosureType} — ${dartUrl}`);
     await page.goto(dartUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 3000)); // DART 로딩 여유
 
-    const target = DART_CAPTURE_TARGETS[disclosureType];
-    const keywords = target ? [target.keyword, target.fallback] : [];
+    // 팝업/오버레이 닫기
+    await page.evaluate(() => {
+      document.querySelectorAll('.ui-dialog .ui-dialog-titlebar-close, .close, [aria-label="Close"]')
+        .forEach(btn => btn.click());
+    }).catch(() => {});
 
-    for (const keyword of keywords) {
-      const found = await page.evaluate((kw) => {
-        const elements = document.querySelectorAll('table, h2, h3, th, td');
-        for (const el of elements) {
-          if (el.textContent.includes(kw)) {
-            const table = el.closest('table') || el;
-            table.scrollIntoView({ block: 'center', behavior: 'instant' });
-            return true;
-          }
-        }
-        return false;
-      }, keyword);
+    // 본문 iframe 찾기
+    const frame = await findDartContentFrame(page);
+    const isIframe = frame !== page.mainFrame();
+    console.log(`  프레임: ${isIframe ? 'iframe 내부' : '메인 페이지'}`);
 
-      if (found) {
-        await new Promise(r => setTimeout(r, 1500));
-        const box = await page.evaluate((kw) => {
-          const elements = document.querySelectorAll('table, h2, h3, th, td');
-          for (const el of elements) {
-            if (el.textContent.includes(kw)) {
-              const table = el.closest('table') || el;
-              const rect = table.getBoundingClientRect();
-              return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-            }
-          }
-          return null;
-        }, keyword);
+    // 공시 유형별 키워드
+    const keywords = DART_CAPTURE_TARGETS[disclosureType] || [disclosureType];
 
-        if (box && box.width > 0 && box.height > 0) {
+    // 키워드로 핵심 테이블 찾기
+    const targetEl = await findTargetTable(frame, keywords);
+
+    if (targetEl) {
+      // element.screenshot()은 요소 전체를 자동 캡처 (스크롤 무관)
+      await frame.evaluate(el => {
+        el.scrollIntoView({ block: 'center', behavior: 'instant' });
+      }, targetEl);
+      await new Promise(r => setTimeout(r, 1000));
+
+      if (isIframe) {
+        // iframe 내부 요소는 element.screenshot()이 안 될 수 있음
+        // → 프레임 내 요소의 위치를 구해서 page 레벨에서 clip 캡처
+        const box = await targetEl.boundingBox();
+        if (box) {
+          // 테이블 높이가 너무 크면 상단 1200px만
+          const captureHeight = Math.min(box.height + 60, 1200);
           await page.screenshot({
             path: outputPath,
             clip: {
-              x: Math.max(0, box.x - 20),
-              y: Math.max(0, box.y - 50),
-              width: Math.min(box.width + 40, 1920),
-              height: Math.min(box.height + 100, 1080),
+              x: Math.max(0, box.x - 10),
+              y: Math.max(0, box.y - 30),
+              width: Math.min(box.width + 20, 1900),
+              height: captureHeight,
             },
           });
+          console.log(`  캡처 완료: ${disclosureType} (clip ${Math.round(box.width)}x${Math.round(captureHeight)})`);
           return true;
         }
       }
+
+      // 메인 프레임이면 element.screenshot() 직접 사용
+      await targetEl.screenshot({ path: outputPath });
+      console.log(`  캡처 완료: ${disclosureType} (element screenshot)`);
+      return true;
     }
 
-    console.warn(`DART "${disclosureType}" 대상 요소 못 찾음 — 전체 페이지 캡처`);
-    await page.screenshot({ path: outputPath, fullPage: true });
+    // fallback: 전체 페이지 캡처 후 상단 crop
+    console.warn(`  DART "${disclosureType}" 키워드 매칭 실패 — fullPage fallback`);
+    const sharp = require('sharp');
+    const fullPath = outputPath.replace('.png', '_full.png');
+    await page.screenshot({ path: fullPath, fullPage: true });
+
+    // 상단 30% crop
+    const meta = await sharp(fullPath).metadata();
+    const cropHeight = Math.min(Math.round(meta.height * 0.3), 1200);
+    await sharp(fullPath)
+      .extract({ left: 0, top: 0, width: meta.width, height: cropHeight })
+      .toFile(outputPath);
+    fs.unlinkSync(fullPath); // 임시 파일 삭제
+    console.log(`  fallback 캡처: ${disclosureType} (상단 ${cropHeight}px crop)`);
     return true;
 
   } catch (err) {
-    console.error(`DART 캡처 실패 (${disclosureType}):`, err.message);
+    console.error(`  DART 캡처 실패 (${disclosureType}):`, err.message);
     return false;
   } finally {
     await page.close();
