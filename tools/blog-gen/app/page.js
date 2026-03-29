@@ -151,8 +151,16 @@ export default function Home() {
       /━+\n📸 여기에 이미지 삽입:\s*(.+?)\n/g,
       (_, filename) => {
         const name = filename.trim();
-        // LLM이 "images/01_..." 또는 "01_..."로 쓸 수 있음 → 중복 방지
-        const imgPath = name.startsWith('images/') ? name : `images/${name}`;
+        // 경로 정규화: images/ 중복 방지 + dart 공시 이미지 경로 보정
+        let imgPath;
+        if (name.startsWith('images/')) {
+          imgPath = name;
+        } else if (name.includes('_공시.png') || name.startsWith('dart/')) {
+          // DART 공시 캡처 → images/dart/ 하위
+          imgPath = name.startsWith('dart/') ? `images/${name}` : `images/dart/${name}`;
+        } else {
+          imgPath = `images/${name}`;
+        }
         const src = outputDir
           ? `/api/image?dir=${encodeURIComponent(outputDir)}&path=${encodeURIComponent(imgPath)}`
           : '';

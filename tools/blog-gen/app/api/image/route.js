@@ -31,13 +31,21 @@ export async function GET(request) {
   }
 
   try {
-    if (!fs.existsSync(resolved)) {
-      console.log('[image 404] 파일 없음:', resolved);
-      return NextResponse.json({ error: '파일을 찾을 수 없습니다', path: resolved }, { status: 404 });
+    // fallback: images/ 에 없으면 images/dart/ 에서도 탐색
+    let target = resolved;
+    if (!fs.existsSync(target)) {
+      const basename = path.basename(target);
+      const dartPath = path.resolve(path.join(path.dirname(target), 'dart', basename));
+      if (dartPath.includes('output') && fs.existsSync(dartPath)) {
+        target = dartPath;
+      } else {
+        console.log('[image 404] 파일 없음:', resolved, '(dart fallback도 실패)');
+        return NextResponse.json({ error: '파일을 찾을 수 없습니다', path: resolved }, { status: 404 });
+      }
     }
 
-    const buffer = fs.readFileSync(resolved);
-    const ext = path.extname(resolved).toLowerCase();
+    const buffer = fs.readFileSync(target);
+    const ext = path.extname(target).toLowerCase();
     const contentType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
 
     return new Response(buffer, {
