@@ -292,14 +292,13 @@ function buildUserPrompt(data, dart, finance, images) {
     }
   }
 
-  // 이미지 파일 목록 (dart/ 이미지 제외 — DART 캡처 비활성화)
-  const chartImages = images?.filter(f => !f.includes('dart/')) || [];
-  if (chartImages.length) {
+  // 이미지 파일 목록
+  const allImages = images || [];
+  if (allImages.length) {
     sections.push('\n## 이미지 파일 목록');
-    chartImages.forEach((f, i) => {
+    allImages.forEach((f, i) => {
       sections.push(`이미지 ${i + 1}: ${f}`);
     });
-    sections.push('⚠️ DART 공시 이미지는 없음. 공시/리스크 섹션에 📸 이미지 마커를 넣지 마라. 텍스트로만 분석할 것.');
   }
 
   sections.push('\n---');

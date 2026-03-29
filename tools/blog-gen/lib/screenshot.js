@@ -818,7 +818,4 @@ async function captureDartHits(hits, outputDir, onProgress = () => {}) {
 
 module.exports = {
   captureSimplyStock,
-  captureDartHits,
-  captureDartDisclosure,
-  DART_CAPTURE_TARGETS,
 };

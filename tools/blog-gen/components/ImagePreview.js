@@ -11,6 +11,15 @@ const TAB_LABELS = {
   '06_forward': 'F-PER',
   '07_trailing': 'T-PER',
   '08_pbr': 'PBR',
+  'dart_01_매출실적': 'DART 매출',
+  'dart_02_연결재무상태표': 'DART 재무',
+  'dart_03_포괄손익계산서': 'DART 손익',
+  'dart_semi': 'DART 반기',
+  'dart_quarterly': 'DART 분기',
+  'dart_audit': 'DART 감사',
+  'dart_critical': 'DART 중요',
+  'dart_stake': 'DART 지분',
+  'dart_corporate': 'DART 기업',
 };
 
 function getTabLabel(filename) {

@@ -5,6 +5,7 @@ import { getStockName } from '../../../lib/utils/stock-codes';
 import { fetchStockData } from '../../../lib/data-fetcher';
 import { captureSimplyStock } from '../../../lib/screenshot';
 import { checkDisclosures } from '../../../lib/dart-checker';
+import { selectDisclosures, captureDartPages } from '../../../lib/dart-capturer';
 import { fetchFinanceData } from '../../../lib/finance-fetcher';
 import { generateBlog } from '../../../lib/blog-writer';
 
@@ -71,7 +72,22 @@ export async function POST(request) {
             send({ type: 'step_progress', step: 3, message: msg });
           });
 
-          // DART 캡처 비활성화 — 데이터(summary)만 사용, 스크린샷 생성하지 않음
+          // DART 캡처 — 우선순위 기반 공시 선별 + element.screenshot()
+          try {
+            const disclosures = await selectDisclosures(stockCode);
+            if (disclosures.length > 0) {
+              send({ type: 'step_progress', step: 3, message: `DART 캡처 ${disclosures.length}건 시작...` });
+              const dartImages = await captureDartPages(disclosures, stockCode, outputDir, (msg) => {
+                send({ type: 'step_progress', step: 3, message: msg });
+              });
+              images.push(...dartImages);
+              if (dartImages.length > 0) {
+                send({ type: 'images', files: images });
+              }
+            }
+          } catch (captureErr) {
+            console.log(`  DART 캡처 실패 (진행 계속): ${captureErr.message}`);
+          }
 
           // dart.json 저장
           fs.writeFileSync(
