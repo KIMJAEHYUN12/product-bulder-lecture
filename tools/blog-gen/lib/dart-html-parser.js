@@ -496,18 +496,34 @@ function parseBlockDeal(allRows) {
 function parseDividend(allRows) {
   const data = {};
 
-  // 1주당 배당금
-  const perShareRow = findRow(allRows, '1주당', '배당금') || findRow(allRows, '주당배당금');
+  // 1주당 배당금 — "1주당" + "배당금"이 있되 "총액"은 없는 행
+  const perShareRow = findRow(allRows, '1주당', '배당금')
+    || findRow(allRows, '주당배당금')
+    || findRow(allRows, '1주당 배당');
   if (perShareRow) {
-    const v = getValueAfterLabel(perShareRow, '배당금');
-    if (v) data['1주당배당금'] = v.replace(/[^0-9,]/g, '') + '원';
+    // "총액" 셀이 같은 행에 있으면 배당금총액 행을 잘못 잡은 것 → 스킵
+    const joined = perShareRow.join(' ');
+    if (!joined.includes('총액')) {
+      const v = getValueAfterLabel(perShareRow, '배당');
+      if (v) {
+        const num = Number(v.replace(/[^0-9]/g, ''));
+        // 1주당 배당금은 통상 100~100,000원 범위
+        // 100,000 초과면 총액을 잘못 잡았을 가능성 → 스킵
+        if (!isNaN(num) && num > 0 && num <= 100000) {
+          data['1주당배당금'] = num.toLocaleString('ko-KR') + '원';
+        }
+      }
+    }
   }
 
   // 배당수익률 / 시가배당율
   const yieldRow = findRow(allRows, '배당수익률') || findRow(allRows, '시가배당율') || findRow(allRows, '시가배당률');
   if (yieldRow) {
     const v = getValueAfterLabel(yieldRow, '배당');
-    if (v) data['배당수익률'] = v.replace(/[^0-9.]/g, '') + '%';
+    if (v) {
+      const num = v.replace(/[^0-9.]/g, '');
+      if (num) data['배당수익률'] = num + '%';
+    }
   }
 
   // 배당기준일
@@ -517,10 +533,10 @@ function parseDividend(allRows) {
     if (v) data['배당기준일'] = v;
   }
 
-  // 배당금총액
+  // 배당금총액 — "총액" 키워드로 명시적 매칭
   const totalRow = findRow(allRows, '배당금총액') || findRow(allRows, '배당금 총액');
   if (totalRow) {
-    const v = getValueAfterLabel(totalRow, '배당금');
+    const v = getValueAfterLabel(totalRow, '총액');
     if (v) data['배당금총액'] = v.replace(/[^0-9,-]/g, '');
   }
 

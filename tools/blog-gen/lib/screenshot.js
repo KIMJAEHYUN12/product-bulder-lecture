@@ -801,6 +801,12 @@ async function captureDartHits(hits, outputDir, onProgress = () => {}) {
       const filename = `${idx}_${hit.type}_공시.png`;
       const outputPath = path.join(dartDir, filename);
 
+      // 자기주식: 캡처 실패율 높음 — summary 데이터로 충분하므로 스킵
+      if (hit.type === '자기주식') {
+        onProgress(`DART 캡처 ${i + 1}/${hits.length}: ${hit.type} — 캡처 스킵 (summary 사용)`);
+        continue;
+      }
+
       onProgress(`DART 캡처 ${i + 1}/${hits.length}: ${hit.type}`);
 
       const ok = await captureDartDisclosure(hit.url, hit.type, outputPath, browser);
