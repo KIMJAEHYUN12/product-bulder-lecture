@@ -1,12 +1,11 @@
 /**
- * DART 캡처 v2 — element.screenshot() 전용
+ * DART 캡처 v3 — 새 탭 직접 URL 캡처
  *
- * v1 문제: iframe 높이 제한으로 테이블 잘림, 키워드 없이 가장 큰 테이블만 찾음
- * v2 수정:
- *   1. iframe 높이 제한 해제 → 테이블 전체 캡처
- *   2. 키워드 기반 테이블 검색 → 정확한 타겟
- *   3. 제목 + 테이블 래핑 → 섹션 제목 포함
- *   4. 최소 행/셀 검증 → 빈 캡처 방지
+ * v2 문제: iframe 확장해도 포괄손익계산서 하단만 잘림, semi/quarterly 표지만 캡처
+ * v3 수정:
+ *   1. frame URL을 새 탭에서 직접 열어 캡처 → iframe 클리핑 완전 회피
+ *   2. semi/quarterly도 사업보고서와 동일하게 목차 이동 후 캡처
+ *   3. 캡처 후 파일 크기 검증 → 표지/빈 화면 자동 삭제
  */
 
 const path = require('path');
@@ -42,7 +41,8 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// 우선순위 규칙 (rank 낮을수록 높은 우선순위)
+// ── 우선순위 규칙 ─────────────────────────────
+
 const PRIORITY_RULES = [
   { match: (t) => /사업보고서/.test(t) && !/첨부/.test(t), rank: 1, type: 'annual' },
   { match: (t) => /반기보고서/.test(t), rank: 2, type: 'semi' },
@@ -53,14 +53,30 @@ const PRIORITY_RULES = [
   { match: (t) => /임원.*매매|배당|신규시설|유상증자/.test(t), rank: 6, type: 'corporate' },
 ];
 
-// 공시 유형별 테이블 검색 키워드
+// ── 보고서 유형별 캡처 섹션 ──────────────────
+
+const REPORT_SECTIONS = {
+  annual: [
+    { treeKeywords: ['매출', '수주'], tableKeywords: ['매출액', '매출'], suffix: 'dart_01_매출실적', label: '매출실적' },
+    { treeKeywords: ['연결 재무상태표', '재무상태표'], tableKeywords: ['자산총계', '유동자산'], suffix: 'dart_02_연결재무상태표', label: '재무상태표' },
+    { treeKeywords: ['연결 포괄손익', '포괄손익계산서', '손익계산서'], tableKeywords: ['매출액', '영업이익', '당기순이익'], suffix: 'dart_03_포괄손익계산서', label: '손익계산서' },
+  ],
+  semi: [
+    { treeKeywords: ['연결 재무상태표', '재무상태표'], tableKeywords: ['자산총계', '유동자산'], suffix: 'dart_semi_재무상태표', label: '반기 재무상태표' },
+    { treeKeywords: ['연결 포괄손익', '포괄손익계산서', '손익계산서'], tableKeywords: ['매출액', '영업이익'], suffix: 'dart_semi_손익계산서', label: '반기 손익계산서' },
+  ],
+  quarterly: [
+    { treeKeywords: ['연결 재무상태표', '재무상태표'], tableKeywords: ['자산총계', '유동자산'], suffix: 'dart_quarterly_재무상태표', label: '분기 재무상태표' },
+    { treeKeywords: ['연결 포괄손익', '포괄손익계산서', '손익계산서'], tableKeywords: ['매출액', '영업이익'], suffix: 'dart_quarterly_손익계산서', label: '분기 손익계산서' },
+  ],
+};
+
+// 일반 공시 유형별 테이블 검색 키워드
 const GENERAL_TABLE_KEYWORDS = {
   audit: ['감사의견', '의견종류'],
   stake: ['보유주식수', '보유비율', '보유주식등의 수', '보유현황'],
   corporate: ['배당금', '1주당 배당금', '배당에 관한', '투자금액', '신규시설', '증자방식'],
   critical: ['영업정지', '사업철수'],
-  semi: ['매출액', '영업이익', '당기순이익'],
-  quarterly: ['매출액', '영업이익', '당기순이익'],
 };
 
 // ── 공시 선별 ─────────────────────────────────
@@ -107,7 +123,6 @@ async function selectDisclosures(stockCode) {
       for (const rule of PRIORITY_RULES) {
         if (rule.match(title)) {
           if (['annual', 'semi', 'quarterly'].includes(rule.type) && usedTypes.has(rule.type)) continue;
-
           ranked.push({
             rank: rule.rank,
             type: rule.type,
@@ -135,63 +150,17 @@ async function selectDisclosures(stockCode) {
   }
 }
 
-// ── 캡처 준비 ─────────────────────────────────
-
-/**
- * iframe 높이 제한 해제 + 뷰포트 확장
- * 테이블이 iframe 경계에 의해 잘리지 않도록 함
- */
-async function prepareForCapture(page, frame) {
-  // 메인 페이지: iframe + 부모 컨테이너 높이/overflow 해제
-  await page.evaluate(() => {
-    document.querySelectorAll('iframe').forEach((f) => {
-      f.style.height = '15000px';
-      f.style.maxHeight = 'none';
-      f.style.overflow = 'visible';
-      let parent = f.parentElement;
-      for (let i = 0; i < 5 && parent && parent !== document.body; i++) {
-        parent.style.overflow = 'visible';
-        parent.style.maxHeight = 'none';
-        parent.style.height = 'auto';
-        parent = parent.parentElement;
-      }
-    });
-  });
-
-  // frame 내부: body overflow 해제
-  try {
-    await frame.evaluate(() => {
-      document.body.style.overflow = 'visible';
-      document.body.style.height = 'auto';
-      document.documentElement.style.overflow = 'visible';
-      document.documentElement.style.height = 'auto';
-    });
-  } catch {}
-
-  // 뷰포트를 충분히 크게
-  await page.setViewport({ width: 1200, height: 10000, deviceScaleFactor: 2 });
-  await delay(300);
-}
-
 // ── 테이블 검색 + 캡처 ───────────────────────
 
 /**
  * frame 내에서 키워드로 테이블을 찾아 <table> element.screenshot()
- *
- * @param {Frame} frame
- * @param {string} filePath
- * @param {object} options
- * @param {string[]} options.keywords - 테이블 내 검색 키워드 (순서대로 시도)
- * @param {number} options.minRows - 최소 행 수 (기본 3)
- * @param {boolean} options.withHeading - 섹션 제목 포함 여부
- * @returns {Promise<boolean>}
  */
 async function captureTable(frame, filePath, { keywords = [], minRows = 3, withHeading = false } = {}) {
   const handle = await frame.evaluateHandle(
     ({ kws, min }) => {
       const tables = Array.from(document.querySelectorAll('table'));
 
-      // 1. 키워드 매칭
+      // 키워드 매칭
       if (kws.length > 0) {
         for (const kw of kws) {
           const found = tables.find((t) => {
@@ -202,7 +171,7 @@ async function captureTable(frame, filePath, { keywords = [], minRows = 3, withH
         }
       }
 
-      // 2. fallback: 가장 큰 테이블 (최소 행 수 충족)
+      // fallback: 가장 큰 테이블
       let best = null;
       let maxCells = 0;
       for (const t of tables) {
@@ -221,11 +190,10 @@ async function captureTable(frame, filePath, { keywords = [], minRows = 3, withH
   const tableEl = handle.asElement();
   if (!tableEl) return false;
 
-  // 제목 포함 래핑 (withHeading=true)
+  // 제목 포함 래핑
   let captureTarget = tableEl;
   if (withHeading) {
     const wrapperHandle = await frame.evaluateHandle((table) => {
-      // 테이블 앞의 제목 요소 찾기
       let heading = null;
       let prev = table.previousElementSibling;
       for (let i = 0; i < 5 && prev; i++) {
@@ -240,13 +208,11 @@ async function captureTable(frame, filePath, { keywords = [], minRows = 3, withH
       }
 
       if (!heading) return table;
-
-      // 부모가 다르면 래핑 불가 → 테이블만 반환
       if (heading.parentElement !== table.parentElement) return table;
 
-      // heading ~ table 범위를 임시 wrapper로 감싸기
       const wrapper = document.createElement('div');
       wrapper.id = '__dart_capture_wrapper';
+      wrapper.style.display = 'inline-block';
       heading.parentElement.insertBefore(wrapper, heading);
 
       let el = heading;
@@ -265,12 +231,60 @@ async function captureTable(frame, filePath, { keywords = [], minRows = 3, withH
     if (wrapperEl) captureTarget = wrapperEl;
   }
 
-  // 스크롤 + 캡처
   await frame.evaluate((el) => el.scrollIntoView({ block: 'start', behavior: 'instant' }), captureTarget);
   await delay(300);
 
   await captureTarget.screenshot({ path: filePath });
   return true;
+}
+
+// ── 새 탭에서 frame URL 직접 캡처 ────────────
+
+/**
+ * frame URL을 새 탭에서 열어 테이블 캡처
+ * iframe 제약을 완전히 회피 → 테이블 전체가 잘리지 않음
+ */
+async function captureFromDirectUrl(browser, url, filePath, options = {}) {
+  const capturePage = await browser.newPage();
+  try {
+    await capturePage.setViewport({ width: 1200, height: 10000, deviceScaleFactor: 2 });
+    await capturePage.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+    await delay(1000);
+
+    // body overflow 해제
+    await capturePage.evaluate(() => {
+      document.body.style.overflow = 'visible';
+      document.body.style.height = 'auto';
+      document.documentElement.style.overflow = 'visible';
+      document.documentElement.style.height = 'auto';
+    });
+
+    return await captureTable(capturePage.mainFrame(), filePath, options);
+  } catch (err) {
+    console.log(`    직접 URL 캡처 실패: ${err.message}`);
+    return false;
+  } finally {
+    await capturePage.close();
+  }
+}
+
+/**
+ * 캡처 파일 검증 — 너무 작으면(표지/빈 화면) 삭제
+ * @returns {boolean} 유효하면 true
+ */
+function validateCapture(filePath, label) {
+  try {
+    const stats = fs.statSync(filePath);
+    if (stats.size < 5000) {
+      console.log(`    ${label} — 캡처 너무 작음 (${(stats.size / 1024).toFixed(1)}KB), 삭제`);
+      fs.unlinkSync(filePath);
+      return false;
+    }
+    console.log(`    ${label} 캡처 완료 (${(stats.size / 1024).toFixed(1)}KB)`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ── 콘텐츠 프레임 탐색 ───────────────────────
@@ -306,14 +320,10 @@ async function findContentFrame(page) {
 async function clickTreeNode(page, keyword) {
   // 접힌 트리 노드 펼치기
   await page.evaluate(() => {
-    const expanders = document.querySelectorAll(
-      '.jstree-closed > ins, .jstree-closed > i, [class*="closed"] > ins',
-    );
-    expanders.forEach((e) => e.click());
+    document.querySelectorAll('.jstree-closed > ins, .jstree-closed > i, [class*="closed"] > ins').forEach((e) => e.click());
   });
   await delay(800);
 
-  // 메인 페이지에서 매칭 노드 찾기
   const clicked = await page.evaluate((kw) => {
     const links = Array.from(document.querySelectorAll('a, span'));
     for (const el of links) {
@@ -329,7 +339,6 @@ async function clickTreeNode(page, keyword) {
 
   if (clicked) return clicked;
 
-  // 서브 프레임에서도 시도
   for (const frame of page.frames()) {
     if (frame === page.mainFrame()) continue;
     try {
@@ -351,29 +360,15 @@ async function clickTreeNode(page, keyword) {
   return null;
 }
 
-// ── 사업보고서 캡처 ──────────────────────────
+// ── 보고서 목차 이동 캡처 (annual/semi/quarterly) ──
 
-async function captureAnnualReport(page, stockCode, outputDir) {
-  const sections = [
-    {
-      treeKeywords: ['매출', '수주'],
-      tableKeywords: ['매출액', '매출'],
-      suffix: 'dart_01_매출실적',
-      label: '매출실적',
-    },
-    {
-      treeKeywords: ['연결 재무상태표', '재무상태표'],
-      tableKeywords: ['자산총계', '유동자산'],
-      suffix: 'dart_02_연결재무상태표',
-      label: '재무상태표',
-    },
-    {
-      treeKeywords: ['연결 포괄손익', '포괄손익계산서', '손익계산서'],
-      tableKeywords: ['매출액', '영업이익', '당기순이익'],
-      suffix: 'dart_03_포괄손익계산서',
-      label: '손익계산서',
-    },
-  ];
+/**
+ * 사업보고서/반기/분기보고서 — 목차에서 섹션 이동 후 캡처
+ * frame URL을 새 탭에서 직접 열어 iframe 클리핑 회피
+ */
+async function captureReportSections(page, browser, stockCode, outputDir, disc) {
+  const sections = REPORT_SECTIONS[disc.type];
+  if (!sections) return [];
 
   const results = [];
 
@@ -399,21 +394,23 @@ async function captureAnnualReport(page, stockCode, outputDir) {
         continue;
       }
 
-      // iframe 높이 제한 해제
-      await prepareForCapture(page, contentFrame);
+      const frameUrl = contentFrame.url();
+      if (!frameUrl || frameUrl === 'about:blank') {
+        console.log(`    프레임 URL 없음, 스킵`);
+        continue;
+      }
 
       const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_${section.suffix}.png`);
-      const ok = await captureTable(contentFrame, filePath, {
+
+      // 새 탭에서 frame URL 직접 열어 캡처 (iframe 클리핑 회피)
+      const ok = await captureFromDirectUrl(browser, frameUrl, filePath, {
         keywords: section.tableKeywords,
         minRows: 3,
         withHeading: true,
       });
 
-      if (ok) {
+      if (ok && validateCapture(filePath, section.label)) {
         results.push(`images/dart/${stockCode}_${section.suffix}.png`);
-        console.log(`    ${section.label} 캡처 완료`);
-      } else {
-        console.log(`    ${section.label} — 유효한 테이블 없음, 스킵`);
       }
     } catch (err) {
       console.log(`    ${section.label} 캡처 실패: ${err.message}`);
@@ -425,24 +422,27 @@ async function captureAnnualReport(page, stockCode, outputDir) {
 
 // ── 일반 공시 캡처 ────────────────────────────
 
-async function captureGeneralDisclosure(page, stockCode, disc, outputDir) {
+async function captureGeneralDisclosure(page, browser, stockCode, disc, outputDir) {
   try {
     const contentFrame = await findContentFrame(page);
     if (!contentFrame) return null;
 
-    // iframe 높이 제한 해제
-    await prepareForCapture(page, contentFrame);
+    const frameUrl = contentFrame.url();
+    if (!frameUrl || frameUrl === 'about:blank') return null;
 
     const suffix = `dart_${disc.type}`;
     const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_${suffix}.png`);
 
     const keywords = GENERAL_TABLE_KEYWORDS[disc.type] || [];
-    const ok = await captureTable(contentFrame, filePath, {
+    const ok = await captureFromDirectUrl(browser, frameUrl, filePath, {
       keywords,
       minRows: 3,
     });
 
-    return ok ? `images/dart/${stockCode}_${suffix}.png` : null;
+    if (!ok) return null;
+    if (!validateCapture(filePath, disc.type)) return null;
+
+    return `images/dart/${stockCode}_${suffix}.png`;
   } catch {
     return null;
   }
@@ -488,20 +488,19 @@ async function captureDartPages(disclosures, stockCode, outputDir, onProgress = 
           })
           .catch(() => {});
 
-        if (disc.type === 'annual') {
-          const files = await captureAnnualReport(page, stockCode, outputDir);
+        if (REPORT_SECTIONS[disc.type]) {
+          // 사업보고서/반기/분기: 목차 이동 후 섹션별 캡처
+          const files = await captureReportSections(page, browser, stockCode, outputDir, disc);
           savedFiles.push(...files);
         } else {
-          const file = await captureGeneralDisclosure(page, stockCode, disc, outputDir);
+          // 일반 공시: 키워드 기반 테이블 캡처
+          const file = await captureGeneralDisclosure(page, browser, stockCode, disc, outputDir);
           if (file) {
             savedFiles.push(file);
           } else {
             console.log(`    ${disc.title} — 유효한 테이블 없음, 스킵`);
           }
         }
-
-        // 뷰포트 복원 (메모리 절약)
-        await page.setViewport({ width: 1200, height: 900, deviceScaleFactor: 2 });
       } catch (err) {
         console.log(`    ${disc.title} 캡처 실패: ${err.message}`);
         try {

@@ -299,6 +299,28 @@ function buildUserPrompt(data, dart, finance, images) {
     allImages.forEach((f, i) => {
       sections.push(`이미지 ${i + 1}: ${f}`);
     });
+
+    // DART 캡처 이미지 배치 안내
+    const dartImages = allImages.filter(f => f.includes('dart/'));
+    if (dartImages.length > 0) {
+      sections.push('\n### DART 캡처 이미지 배치 안내');
+      sections.push('아래 DART 이미지를 본문의 해당 분석 섹션에 📸 마커로 반드시 삽입할 것:');
+      for (const f of dartImages) {
+        const fname = f.split('/').pop();
+        if (fname.includes('매출실적')) {
+          sections.push(`📸 여기에 이미지 삽입: ${f} → "매출실적" 또는 "실적 분석" 섹션에 삽입`);
+        } else if (fname.includes('재무상태표')) {
+          sections.push(`📸 여기에 이미지 삽입: ${f} → "재무상태표" 또는 "재무 건전성" 섹션에 삽입`);
+        } else if (fname.includes('포괄손익') || fname.includes('손익계산서')) {
+          sections.push(`📸 여기에 이미지 삽입: ${f} → "손익계산서" 또는 "수익성 분석" 섹션에 삽입`);
+        } else if (fname.includes('audit') || fname.includes('감사')) {
+          sections.push(`📸 여기에 이미지 삽입: ${f} → "감사의견" 또는 "공시/리스크" 섹션에 삽입`);
+        } else {
+          sections.push(`📸 여기에 이미지 삽입: ${f} → "공시/리스크" 섹션에 삽입`);
+        }
+      }
+      sections.push('⚠️ 위 DART 이미지가 있으면 반드시 본문에 📸 마커를 넣어라. 빠뜨리지 마라.');
+    }
   }
 
   sections.push('\n---');
