@@ -3,7 +3,13 @@
  *
  * fnlttSinglAcntAll.json API로 최근 2년 분기별 재무제표 조회.
  * CFS(연결) 우선, 실패 시 OFS(개별) fallback.
- * IS 항목은 누적→개별분기 역산.
+ *
+ * 핵심 필드:
+ * - thstrm_amount: 해당 분기 개별 금액 (3개월분)
+ * - thstrm_add_amount: 기초~해당분기 누적 금액
+ * - 사업보고서: thstrm_amount = 12개월 전체 (누적 없음)
+ *
+ * Q4 = 사업보고서 thstrm_amount - 3Q thstrm_add_amount
  */
 
 const corpCodesData = require('../data/dartCorpCodes.json');
@@ -22,24 +28,48 @@ const REPORT_CODES = [
   { code: '11011', label: '사업보고서', quarter: 4 },
 ];
 
-// 추출할 계정과목
+// 추출할 계정과목 (account_id 우선 매칭, account_nm fallback)
 const TARGET_ACCOUNTS = {
   IS: [
-    { name: '매출액', keywords: ['매출액', '수익(매출액)'] },
-    { name: '영업이익', keywords: ['영업이익', '영업이익(손실)'] },
-    { name: '당기순이익', keywords: ['당기순이익', '당기순이익(손실)', '분기순이익', '반기순이익'] },
+    {
+      name: '매출액',
+      accountIds: ['ifrs-full_Revenue'],
+      keywords: ['매출액', '영업수익', '수익(매출액)'],
+    },
+    {
+      name: '영업이익',
+      accountIds: ['dart_OperatingIncomeLoss'],
+      keywords: ['영업이익', '영업이익(손실)'],
+    },
+    {
+      name: '당기순이익',
+      accountIds: ['ifrs-full_ProfitLoss'],
+      keywords: ['당기순이익', '당기순이익(손실)', '분기순이익(손실)', '반기순이익(손실)'],
+    },
   ],
   BS: [
-    { name: '자산총계', keywords: ['자산총계'] },
-    { name: '부채총계', keywords: ['부채총계'] },
-    { name: '자본총계', keywords: ['자본총계'] },
+    {
+      name: '자산총계',
+      accountIds: ['ifrs-full_Assets'],
+      keywords: ['자산총계'],
+    },
+    {
+      name: '부채총계',
+      accountIds: ['ifrs-full_Liabilities'],
+      keywords: ['부채총계'],
+    },
+    {
+      name: '자본총계',
+      accountIds: ['ifrs-full_Equity'],
+      keywords: ['자본총계'],
+    },
   ],
 };
 
 /**
  * 단일 보고서 API 호출
  */
-async function fetchSingleReport(corpCode, year, reportCode, fsDiv, onProgress) {
+async function fetchSingleReport(corpCode, year, reportCode, fsDiv) {
   const dartKey = process.env.DART_API_KEY;
   if (!dartKey) throw new Error('DART_API_KEY 환경변수가 설정되지 않았습니다');
 
@@ -58,27 +88,51 @@ async function fetchSingleReport(corpCode, year, reportCode, fsDiv, onProgress) 
   if (!res.ok) return null;
   const data = await res.json();
 
-  if (data.status === '013') return null; // 조회 결과 없음
+  if (data.status === '013') return null;
   if (data.status !== '000') return null;
 
   return data.list || null;
 }
 
 /**
- * 계정과목 검색 - thstrm_amount(당기) 반환
+ * 금액 문자열 → 숫자
  */
-function findAccountAmount(items, keywords) {
-  for (const kw of keywords) {
-    const found = items.find(item =>
-      item.account_nm?.trim() === kw && item.thstrm_amount != null
-    );
+function parseAmount(val) {
+  if (val == null || val === '' || val === '-') return null;
+  const num = parseInt(String(val).replace(/,/g, ''), 10);
+  return isNaN(num) ? null : num;
+}
+
+/**
+ * 계정과목 검색 — sj_div 필터 + account_id 우선 + account_nm fallback
+ * @returns {{ amount: number|null, cumAmount: number|null }}
+ */
+function findAccount(items, sjDiv, acctDef) {
+  const filtered = items.filter(i => i.sj_div === sjDiv);
+
+  // 1차: account_id로 매칭
+  for (const id of acctDef.accountIds) {
+    const found = filtered.find(i => i.account_id === id);
     if (found) {
-      const raw = String(found.thstrm_amount).replace(/,/g, '');
-      const val = parseInt(raw, 10);
-      return isNaN(val) ? null : val;
+      return {
+        amount: parseAmount(found.thstrm_amount),
+        cumAmount: parseAmount(found.thstrm_add_amount),
+      };
     }
   }
-  return null;
+
+  // 2차: account_nm으로 매칭
+  for (const kw of acctDef.keywords) {
+    const found = filtered.find(i => i.account_nm?.trim() === kw);
+    if (found) {
+      return {
+        amount: parseAmount(found.thstrm_amount),
+        cumAmount: parseAmount(found.thstrm_add_amount),
+      };
+    }
+  }
+
+  return { amount: null, cumAmount: null };
 }
 
 /**
@@ -86,14 +140,11 @@ function findAccountAmount(items, keywords) {
  */
 function toEok(val) {
   if (val == null) return null;
-  return Math.round(val / 1e7) / 10; // 억원, 소수 1자리
+  return Math.round(val / 1e7) / 10;
 }
 
 /**
  * 재무제표 데이터 조회 + 가공
- * @param {string} stockCode - 6자리 종목코드
- * @param {(msg: string) => void} onProgress
- * @returns {Promise<object|null>}
  */
 async function fetchFinanceData(stockCode, onProgress = () => {}) {
   const corpCode = getCorpCode(stockCode);
@@ -104,10 +155,12 @@ async function fetchFinanceData(stockCode, onProgress = () => {}) {
 
   const now = new Date();
   const currentYear = now.getFullYear();
-  const years = [currentYear, currentYear - 1];
+  // 사업보고서는 보통 3월 말에 제출 → currentYear-1이 최신
+  // currentYear-2도 포함해 2년치 확보
+  const years = [currentYear - 1, currentYear - 2];
 
   // 연도별 × 보고서별 조회
-  const rawData = {}; // { '2025_1Q': { IS: {...}, BS: {...} }, ... }
+  const rawData = {};
 
   for (const year of years) {
     for (const report of REPORT_CODES) {
@@ -115,32 +168,40 @@ async function fetchFinanceData(stockCode, onProgress = () => {}) {
       onProgress(`${key} 재무제표 조회 중...`);
 
       // CFS(연결) 우선
-      let items = await fetchSingleReport(corpCode, year, report.code, 'CFS', onProgress);
+      let items = await fetchSingleReport(corpCode, year, report.code, 'CFS');
       let fsType = 'CFS';
 
       if (!items) {
-        // OFS(개별) fallback
-        items = await fetchSingleReport(corpCode, year, report.code, 'OFS', onProgress);
+        items = await fetchSingleReport(corpCode, year, report.code, 'OFS');
         fsType = 'OFS';
       }
 
       if (!items) {
         onProgress(`${key}: 데이터 없음`);
+        await new Promise(r => setTimeout(r, 300));
         continue;
       }
 
-      // 계정과목 추출
-      const extracted = { fsType };
-      for (const [category, accounts] of Object.entries(TARGET_ACCOUNTS)) {
-        for (const acct of accounts) {
-          extracted[acct.name] = findAccountAmount(items, acct.keywords);
-        }
+      // IS 항목: CIS(포괄손익계산서) 또는 IS(손익계산서)에서 추출
+      const hasCIS = items.some(i => i.sj_div === 'CIS');
+      const isSjDiv = hasCIS ? 'CIS' : 'IS';
+
+      const extracted = { fsType, year, quarter: report.quarter, label: report.label };
+
+      for (const acct of TARGET_ACCOUNTS.IS) {
+        const result = findAccount(items, isSjDiv, acct);
+        extracted[acct.name] = result.amount;
+        extracted[`${acct.name}_cum`] = result.cumAmount;
       }
 
-      rawData[key] = { year, quarter: report.quarter, label: report.label, ...extracted };
+      for (const acct of TARGET_ACCOUNTS.BS) {
+        const result = findAccount(items, 'BS', acct);
+        extracted[acct.name] = result.amount;
+      }
+
+      rawData[key] = extracted;
       onProgress(`${key}: ${fsType} 추출 완료`);
 
-      // DART rate limit 방지
       await new Promise(r => setTimeout(r, 300));
     }
   }
@@ -151,12 +212,15 @@ async function fetchFinanceData(stockCode, onProgress = () => {}) {
     return null;
   }
 
-  // 개별분기 역산 (IS 항목만)
-  const quarters = calcIndividualQuarters(rawData, years);
+  // 개별분기 배열 생성
+  const quarters = buildQuarters(rawData, years);
 
-  // 자동 계산: 비율 + YoY
+  // 비율 + YoY 계산
   enrichWithRatios(quarters);
   enrichWithYoY(quarters);
+
+  // 이상치 검증
+  validateQuarters(quarters);
 
   const result = {
     raw: rawData,
@@ -169,13 +233,15 @@ async function fetchFinanceData(stockCode, onProgress = () => {}) {
 }
 
 /**
- * 누적 IS → 개별분기 역산
- * BS 항목은 시점값이므로 그대로 사용
+ * 개별분기 배열 생성
+ *
+ * - Q1/Q2/Q3: thstrm_amount가 이미 개별분기 값
+ * - Q4: 사업보고서 thstrm_amount(FY) - 3Q thstrm_add_amount(9M 누적)
  */
-function calcIndividualQuarters(rawData, years) {
+function buildQuarters(rawData, years) {
   const quarters = [];
-  const isAccounts = TARGET_ACCOUNTS.IS.map(a => a.name);
-  const bsAccounts = TARGET_ACCOUNTS.BS.map(a => a.name);
+  const isNames = TARGET_ACCOUNTS.IS.map(a => a.name);
+  const bsNames = TARGET_ACCOUNTS.BS.map(a => a.name);
 
   for (const year of years) {
     for (const report of REPORT_CODES) {
@@ -183,43 +249,42 @@ function calcIndividualQuarters(rawData, years) {
       const data = rawData[key];
       if (!data) continue;
 
+      const displayLabel = report.quarter === 4 ? 'Q4' : report.label;
       const q = {
         year,
         quarter: report.quarter,
-        label: `${year} ${report.label}`,
+        label: `${year} ${displayLabel}`,
         fsType: data.fsType,
-        isCumulative: false,
       };
 
-      // BS 항목: 시점값 그대로
-      for (const name of bsAccounts) {
+      // BS: 시점값 그대로
+      for (const name of bsNames) {
         q[name] = data[name];
       }
 
-      // IS 항목: 개별분기 역산
-      for (const name of isAccounts) {
-        const cumVal = data[name];
-        if (cumVal == null) {
-          q[name] = null;
-          continue;
+      // IS: 개별분기 처리
+      if (report.quarter <= 3) {
+        // Q1/Q2/Q3: thstrm_amount = 개별분기 값
+        for (const name of isNames) {
+          q[name] = data[name];
         }
+      } else {
+        // Q4: FY - 9M 누적
+        const q3Key = `${year}_3Q`;
+        const q3Data = rawData[q3Key];
 
-        if (report.quarter === 1) {
-          // Q1: 누적값 = 개별분기값
-          q[name] = cumVal;
-        } else {
-          // Q2~Q4: 이전 보고서 누적값을 빼야 함
-          const prevReport = REPORT_CODES[report.quarter - 2]; // Q2→1Q, Q3→반기, Q4→3Q
-          const prevKey = `${year}_${prevReport.label}`;
-          const prevData = rawData[prevKey];
-          const prevVal = prevData?.[name];
+        for (const name of isNames) {
+          const fyVal = data[name]; // 사업보고서 = 12개월 전체
+          const cumQ3 = q3Data?.[`${name}_cum`]; // 3Q 누적(9M)
 
-          if (prevVal != null) {
-            q[name] = cumVal - prevVal;
+          if (fyVal != null && cumQ3 != null) {
+            q[name] = fyVal - cumQ3;
+          } else if (fyVal != null) {
+            // 3Q 누적 없으면 FY 전체로 표시 + 플래그
+            q[name] = fyVal;
+            q.isFullYear = true;
           } else {
-            // 이전 분기 없으면 누적값 그대로 + 플래그
-            q[name] = cumVal;
-            q.isCumulative = true;
+            q[name] = null;
           }
         }
       }
@@ -238,16 +303,17 @@ function calcIndividualQuarters(rawData, years) {
 }
 
 /**
- * 영업이익률, 순이익률, 부채비율 계산
+ * 영업이익률, 순이익률, 부채비율
  */
 function enrichWithRatios(quarters) {
   for (const q of quarters) {
-    if (q['매출액'] && q['매출액'] !== 0) {
+    const rev = q['매출액'];
+    if (rev && rev !== 0) {
       if (q['영업이익'] != null) {
-        q['영업이익률'] = ((q['영업이익'] / q['매출액']) * 100).toFixed(1);
+        q['영업이익률'] = ((q['영업이익'] / rev) * 100).toFixed(1);
       }
       if (q['당기순이익'] != null) {
-        q['순이익률'] = ((q['당기순이익'] / q['매출액']) * 100).toFixed(1);
+        q['순이익률'] = ((q['당기순이익'] / rev) * 100).toFixed(1);
       }
     }
     if (q['자본총계'] && q['자본총계'] !== 0 && q['부채총계'] != null) {
@@ -261,7 +327,10 @@ function enrichWithRatios(quarters) {
  */
 function enrichWithYoY(quarters) {
   for (const q of quarters) {
-    const prev = quarters.find(p => p.year === q.year - 1 && p.quarter === q.quarter);
+    if (q.isFullYear) continue; // FY 전체값으로는 YoY 비교 불가
+    const prev = quarters.find(p =>
+      p.year === q.year - 1 && p.quarter === q.quarter && !p.isFullYear
+    );
     if (!prev) continue;
 
     for (const name of ['매출액', '영업이익', '당기순이익']) {
@@ -273,7 +342,28 @@ function enrichWithYoY(quarters) {
 }
 
 /**
- * 요약 텍스트 생성 (blog-writer에 전달)
+ * 이상치 검증 — 비정상 비율 플래그
+ */
+function validateQuarters(quarters) {
+  for (const q of quarters) {
+    const opRate = parseFloat(q['영업이익률']);
+    const npRate = parseFloat(q['순이익률']);
+
+    if (!isNaN(opRate) && Math.abs(opRate) > 100) {
+      q.anomaly = (q.anomaly || '') + `영업이익률 ${opRate}% 이상치; `;
+    }
+    if (!isNaN(npRate) && Math.abs(npRate) > 200) {
+      q.anomaly = (q.anomaly || '') + `순이익률 ${npRate}% 이상치; `;
+    }
+    // 순이익 > 매출 (절대값)
+    if (q['매출액'] && q['당기순이익'] && Math.abs(q['당기순이익']) > Math.abs(q['매출액']) * 2) {
+      q.anomaly = (q.anomaly || '') + '순이익이 매출의 2배 초과; ';
+    }
+  }
+}
+
+/**
+ * 요약 테이블 생성
  */
 function buildSummary(quarters) {
   if (!quarters.length) return '재무제표 데이터 없음';
@@ -286,32 +376,36 @@ function buildSummary(quarters) {
     const rev = toEok(q['매출액']);
     const op = toEok(q['영업이익']);
     const np = toEok(q['당기순이익']);
-    const cumNote = q.isCumulative ? '(누적)' : '';
+    const note = q.isFullYear ? '(연간)' : '';
+    const anomalyMark = q.anomaly ? ' ⚠️' : '';
 
     lines.push(
-      `| ${q.label}${cumNote} | ${rev != null ? rev.toLocaleString() : '-'} | ${op != null ? op.toLocaleString() : '-'} | ${q['영업이익률'] || '-'}% | ${np != null ? np.toLocaleString() : '-'} | ${q['순이익률'] || '-'}% | ${q['부채비율'] || '-'}% |`
+      `| ${q.label}${note}${anomalyMark} | ${rev != null ? rev.toLocaleString() : '-'} | ${op != null ? op.toLocaleString() : '-'} | ${q['영업이익률'] || '-'}% | ${np != null ? np.toLocaleString() : '-'} | ${q['순이익률'] || '-'}% | ${q['부채비율'] || '-'}% |`
     );
   }
 
-  // YoY 요약
-  const latest = quarters[0];
-  const yoyItems = [];
-  if (latest['매출액_YoY']) yoyItems.push(`매출 YoY ${latest['매출액_YoY']}%`);
-  if (latest['영업이익_YoY']) yoyItems.push(`영업이익 YoY ${latest['영업이익_YoY']}%`);
-  if (latest['당기순이익_YoY']) yoyItems.push(`순이익 YoY ${latest['당기순이익_YoY']}%`);
+  // YoY 요약 (isFullYear 아닌 최신 분기)
+  const latest = quarters.find(q => !q.isFullYear);
+  if (latest) {
+    const yoyItems = [];
+    if (latest['매출액_YoY']) yoyItems.push(`매출 YoY ${latest['매출액_YoY']}%`);
+    if (latest['영업이익_YoY']) yoyItems.push(`영업이익 YoY ${latest['영업이익_YoY']}%`);
+    if (latest['당기순이익_YoY']) yoyItems.push(`순이익 YoY ${latest['당기순이익_YoY']}%`);
 
-  if (yoyItems.length) {
-    lines.push('');
-    lines.push(`최신 분기(${latest.label}) 전년 동기 대비: ${yoyItems.join(', ')}`);
+    if (yoyItems.length) {
+      lines.push('');
+      lines.push(`최신 분기(${latest.label}) 전년 동기 대비: ${yoyItems.join(', ')}`);
+    }
   }
 
-  // BS 요약 (최신 분기)
-  const assets = toEok(latest['자산총계']);
-  const liabilities = toEok(latest['부채총계']);
-  const equity = toEok(latest['자본총계']);
+  // BS 요약
+  const latestBS = quarters[0];
+  const assets = toEok(latestBS['자산총계']);
+  const liabilities = toEok(latestBS['부채총계']);
+  const equity = toEok(latestBS['자본총계']);
   if (assets != null) {
     lines.push('');
-    lines.push(`재무상태(${latest.label}): 자산 ${assets.toLocaleString()}억, 부채 ${liabilities?.toLocaleString() || '-'}억, 자본 ${equity?.toLocaleString() || '-'}억, 부채비율 ${latest['부채비율'] || '-'}%`);
+    lines.push(`재무상태(${latestBS.label}): 자산 ${assets.toLocaleString()}억, 부채 ${liabilities?.toLocaleString() || '-'}억, 자본 ${equity?.toLocaleString() || '-'}억, 부채비율 ${latestBS['부채비율'] || '-'}%`);
   }
 
   return lines.join('\n');
