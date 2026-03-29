@@ -253,14 +253,18 @@ function buildUserPrompt(data, dart, images) {
     sections.push('⚠️ 밸류에이션 데이터 없음 — 이 종목은 PER/PBR 분석 섹션을 생략할 것. 데이터 없이 지어내지 마라.');
   }
 
-  // DART 공시 — summary가 있는 히트만 포함 (null이면 제외)
-  const validHits = dart?.hits?.filter(h => h.summary) || [];
+  // DART 공시 — summary가 있는 히트 + 배당은 summary null이어도 포함
+  const validHits = dart?.hits?.filter(h => h.summary || h.type === '배당') || [];
   if (validHits.length > 0) {
     sections.push('\n## DART 공시 — 히트 항목 (반드시 본문에 반영할 것)');
     for (const hit of validHits) {
       sections.push(`\n### [${hit.type}] ${hit.report_nm} (${hit.rcept_dt})`);
       sections.push(`URL: ${hit.url}`);
-      sections.push(`상세 데이터:\n${hit.summary}`);
+      if (hit.summary) {
+        sections.push(`상세 데이터:\n${hit.summary}`);
+      } else if (hit.type === '배당') {
+        sections.push(`상세 데이터:\n[배당] ${hit.report_nm} (${hit.rcept_dt}) — 상세 수치는 확인 불가, 배당 공시 존재. 공시/리스크 섹션에서 배당 정책 간략히 언급할 것.`);
+      }
       sections.push(`→ 이 공시를 본문 "4단계 — 공시/리스크"에서 긍정/부정 양면 해석할 것`);
     }
     if (dart.clean?.length > 0) {

@@ -146,7 +146,7 @@ export default function Home() {
 
   const renderedHtml = useMemo(() => {
     if (!markdown) return '';
-    // 이미지 마커를 <img> 태그로 변환
+    // 이미지 마커를 <img> 태그로 변환 (캡처 실패한 이미지는 마커 제거)
     const withImages = markdown.replace(
       /━+\n📸 여기에 이미지 삽입:\s*(.+?)\n/g,
       (_, filename) => {
@@ -156,11 +156,14 @@ export default function Home() {
         if (name.startsWith('images/')) {
           imgPath = name;
         } else if (name.includes('_공시.png') || name.startsWith('dart/')) {
-          // DART 공시 캡처 → images/dart/ 하위
           imgPath = name.startsWith('dart/') ? `images/${name}` : `images/dart/${name}`;
         } else {
           imgPath = `images/${name}`;
         }
+        // images 배열에 해당 파일이 없으면 마커 블록 전체 제거
+        const basename = imgPath.replace(/^images\//, '');
+        const exists = images.some(img => img === imgPath || img === basename || img.endsWith(basename));
+        if (!exists) return '';
         const src = outputDir
           ? `/api/image?dir=${encodeURIComponent(outputDir)}&path=${encodeURIComponent(imgPath)}`
           : '';
@@ -168,7 +171,7 @@ export default function Home() {
       }
     ).replace(/━+\n?/g, ''); // 남은 보더 라인 제거
     return marked.parse(withImages);
-  }, [markdown, outputDir]);
+  }, [markdown, outputDir, images]);
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-8">
