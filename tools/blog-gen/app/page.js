@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
+import { marked } from 'marked';
 import StockInput from '../components/StockInput';
 import ModeSelector from '../components/ModeSelector';
 import ProgressTracker from '../components/ProgressTracker';
@@ -143,6 +144,21 @@ export default function Home() {
 
   const hasResults = steps.some(s => s.status === 'done' || s.status === 'error');
 
+  const renderedHtml = useMemo(() => {
+    if (!markdown) return '';
+    // 이미지 마커를 <img> 태그로 변환
+    const withImages = markdown.replace(
+      /━+\n📸 여기에 이미지 삽입:\s*(.+?)\n/g,
+      (_, filename) => {
+        const src = outputDir
+          ? `/api/image?dir=${encodeURIComponent(outputDir)}&path=images/${encodeURIComponent(filename.trim())}`
+          : '';
+        return `![${filename.trim()}](${src})\n`;
+      }
+    ).replace(/━+\n?/g, ''); // 남은 보더 라인 제거
+    return marked.parse(withImages);
+  }, [markdown, outputDir]);
+
   return (
     <main className="max-w-3xl mx-auto px-4 py-8">
       {/* 헤더 */}
@@ -201,19 +217,22 @@ export default function Home() {
         </section>
       )}
 
-      {/* 마크다운 프리뷰 */}
+      {/* 블로그 미리보기 (HTML 렌더링) */}
       {markdown && (
         <section className="mb-6">
           <div className="bg-card rounded-lg border border-border p-4">
             <h2 className="text-sm font-medium text-slate-300 mb-3">
-              생성된 마크다운 (미리보기)
+              블로그 미리보기
             </h2>
-            <div className="bg-slate-900 rounded-lg border border-slate-700 p-4 max-h-[400px] overflow-y-auto">
-              <pre className="text-xs text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">
-                {markdown.slice(0, 3000)}
-                {markdown.length > 3000 && '\n\n... (전체 내용은 마크다운 복사 버튼으로 확인)'}
-              </pre>
-            </div>
+            <div
+              className="bg-white rounded-lg border border-slate-700 p-6 max-h-[600px] overflow-y-auto
+                         prose prose-sm max-w-none text-slate-900
+                         prose-headings:text-slate-900 prose-strong:text-slate-900
+                         prose-table:border-collapse prose-td:border prose-td:border-slate-300 prose-td:px-3 prose-td:py-1.5
+                         prose-th:border prose-th:border-slate-300 prose-th:bg-slate-100 prose-th:px-3 prose-th:py-1.5
+                         prose-img:max-w-full prose-img:rounded-md"
+              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+            />
           </div>
         </section>
       )}
@@ -224,6 +243,7 @@ export default function Home() {
           <OutputActions
             outputDir={outputDir}
             markdown={markdown}
+            renderedHtml={renderedHtml}
             onRerun={handleReset}
           />
         </section>
