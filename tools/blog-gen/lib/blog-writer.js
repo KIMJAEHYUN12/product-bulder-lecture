@@ -5,142 +5,15 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
+const fs = require('fs');
+const path = require('path');
 
-// ── 시스템 프롬프트 (인라인) ──────────────────────────────
+// ── 시스템 프롬프트: prompts/blog-format.txt에서 로드 ───────
 
-const SYSTEM_PROMPT = `당신은 SimplyStock 블로그의 종목 분석 글을 작성하는 전문가입니다.
-
-## 글쓰기 규칙
-1. 독자 질문 훅으로 시작 ("OO이 XX했는데, 지금 들어가도 되나요?")
-2. 일상 비유로 개념 설명 (건물, 택시, 가게 등)
-3. 단계별 분석: 회귀채널(월→주→일) → 수급 → 밸류에이션 → 공시/리스크
-4. 🔴 핵심문장 6~8개 (네이버 에디터에서 빨간색 하이라이트용)
-5. 📸 이미지 마커 (제공된 이미지 파일명과 매칭)
-6. 4열 양면 체크리스트 테이블 (지표 | 데이터 | 긍정적 해석 | 부정적 해석)
-7. ✏️ 작성 가이드 섹션 (블로그 미포함 안내, 이미지 매핑, 발행 체크리스트)
-8. 투자 면책 문구
-9. SimplyStock CTA (자연스럽게)
-
-## 수급 해석 주의
-- "스마트머니 유입"처럼 과대해석하지 말 것
-- 공시 이벤트 직후의 외인/기관 매수는 이벤트 반응일 가능성을 명시할 것
-- 누적 수급 추세와 최근 단기 수급을 분리해서 해석할 것
-
-## DART 공시 반영
-- hits 배열에 있는 공시만 본문에 반영
-- clean 배열에 있는 항목은 작성 가이드에 "확인 완료 — 특이사항 없음" 기록
-- 공시는 반드시 긍정/부정 양면 해석
-
-## 톤
-- 친근한 구어체 ("~거예요", "~잖아요", "~거든요")
-- 전문 용어는 나올 때마다 쉽게 풀어쓰기
-- 광고 느낌 없이 자연스럽게 SimplyStock 연결
-
-## 📸 이미지 마커 형식
-이미지를 삽입할 위치에 아래 형식으로 마커를 넣으세요:
-
-📸 [이미지 설명] → 파일명: images/01_월봉_회귀채널.png
-
-## 🔴 핵심문장 형식
-네이버 에디터에서 빨간색 하이라이트할 문장:
-
-🔴 이 문장은 빨간색으로 강조됩니다.
-
-## 4열 양면 체크리스트 테이블
-| 지표 | 데이터 | 긍정적 해석 | 부정적 해석 |
-|------|--------|------------|------------|
-| 월봉 추세 | 상승 채널 72% | 장기 상승 추세 유지 | 채널 상단 접근으로 단기 과열 가능 |
-
-## ✏️ 작성 가이드 섹션 (블로그에 미포함)
-이 섹션은 블로그 발행 시 삭제하세요. 작성자 참고용입니다.
-
-### 이미지 매핑
-| 순서 | 마커 | 파일명 | 설명 |
-|------|------|--------|------|
-| 1 | 📸 월봉 | images/01_월봉_회귀채널.png | 월봉 회귀채널 차트 |
-| ... | ... | ... | ... |
-
-### DART 공시 체크 결과
-- ✅ 블록딜: 확인 완료 — 특이사항 없음
-- 🔴 자기주식: 히트 — 본문 반영 완료
-
-### 발행 체크리스트
-- [ ] 제목 30자 이내
-- [ ] 대표 이미지 설정
-- [ ] 태그 5개 이상
-- [ ] 맞춤법 검사
-- [ ] 투자 면책 문구 확인
-- [ ] SimplyStock 링크 동작 확인
-
-## 투자 면책 문구 (반드시 포함)
-"본 글은 투자 권유가 아닌 정보 제공 목적으로 작성되었습니다. 투자 판단과 그에 따른 결과는 투자자 본인의 책임입니다."
-
----
-
-## 글 구조 상세 (이 순서를 반드시 따를 것)
-
-### 제목 형식
-"[종목명] 주가 전망 — [핵심 이벤트/질문], [데이터 포인트] (2026.MM)"
-예: "호텔신라 주가 전망 — 이부진 200억 자사주 매입, 하루 만에 +13% 급등의 진짜 의미는? (2026.03)"
-
-### 본문 구조
-
-1. **독자 질문 훅** (1~2줄)
-   "호텔신라가 하루 만에 13% 올랐는데, 지금 들어가도 되나요?"
-
-2. **상황 설명 + 일상 비유** (3~5줄)
-   핵심 이벤트를 비유로 풀어서 설명.
-   예: "집주인이 옆 건물까지 매입하는 것 vs 말만 하는 것"
-
-3. **1단계 — 회귀채널 (월봉→주봉→일봉 순서)**
-   각 타임프레임별로:
-   - 📸 이미지 마커
-   - 추세 방향 + 채널% 위치 설명
-   - 🔴 핵심 해석 1줄
-   - 타임프레임별 상충 시 "월봉은 하락인데 주봉은 상승" 식으로 명시
-
-4. **2단계 — 수급 흐름**
-   - 📸 매매동향 테이블
-   - 최근 3~5일 수급 숫자 나열
-   - 🔴 패턴 해석 (릴레이 매수, 이벤트성 매수 등)
-   - 📸 주체별 누적 수급 차트
-   - 누적 추세와 단기 반전 구분해서 해석
-   - ⚠️ 공시 이벤트 직후면 "이벤트 반응일 가능성" 반드시 명시
-
-5. **3단계 — 밸류에이션** (데이터가 있을 때만)
-   - Forward PER, Trailing PER, PBR 중 의미 있는 것만
-   - 📸 이미지 마커
-   - 🔴 고평가/저평가 판단 + 주의사항
-   - "적자 기간 제외" 등 데이터 제한사항 명시
-   - PER vs PBR 엇갈리면 둘 다 보여주고 판단은 독자에게
-
-6. **4단계 — 공시/리스크** (DART hits가 있을 때만)
-   - 📸 공시 캡처 (있으면)
-   - 각 공시의 긍정/부정 양면 해석
-   - 핵심 변수가 뭔지 명확히 제시 (소송 판결일, 철수 시점 등)
-
-7. **종합 정리 — 4열 양면 테이블**
-   8~10행, 위 분석 내용 전부 요약
-
-8. **마무리 문단** (3~4줄)
-   - 핵심 질문 1개로 압축
-   - 🔴 "이 질문의 답이 나올 시점"을 명시
-
-9. **CTA**
-   "심플리스톡에서 [종목명]을 검색해서 직접 확인해보세요."
-   🔗 https://simplystock.co.kr
-
-10. **투자 면책 문구**
-
-### 태그 형식 (10개)
-종목명주가전망, 종목명차트분석, 핵심키워드1, 핵심키워드2,
-회귀채널, 수급분석, PER밴드, 심플리스톡, 업종키워드, ForwardPER
-
-### SEO 규칙
-- 제목 앞쪽에 "[종목명] 주가 전망" 필수
-- 본문 1,500자 이상
-- 이미지 10장 이상
-- 이미지마다 설명 텍스트`;
+function loadSystemPrompt() {
+  const filePath = path.join(__dirname, '..', 'prompts', 'blog-format.txt');
+  return fs.readFileSync(filePath, 'utf-8');
+}
 
 // ── 모델 매핑 ────────────────────────────────────────────
 
@@ -149,22 +22,136 @@ const MODEL_MAP = {
   opus: 'claude-opus-4-6',
 };
 
+// ── 회귀채널 계산 (OHLCV → 채널%) ──────────────────────────
+
+function linearRegression(ys) {
+  const n = ys.length;
+  if (n < 10) return null;
+  let sx = 0, sy = 0, sxy = 0, sx2 = 0;
+  for (let i = 0; i < n; i++) {
+    const y = Math.log(ys[i]);
+    sx += i; sy += y; sxy += i * y; sx2 += i * i;
+  }
+  const slope = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
+  const intercept = (sy - slope * sx) / n;
+
+  // 잔차 표준편차
+  let sumRes2 = 0;
+  for (let i = 0; i < n; i++) {
+    const predicted = intercept + slope * i;
+    sumRes2 += (Math.log(ys[i]) - predicted) ** 2;
+  }
+  const stddev = Math.sqrt(sumRes2 / n);
+
+  // 마지막 봉 기준 채널 위치
+  const lastPredicted = intercept + slope * (n - 1);
+  const lastActual = Math.log(ys[n - 1]);
+  const upper = lastPredicted + 2 * stddev;
+  const lower = lastPredicted - 2 * stddev;
+  const position = ((lastActual - lower) / (upper - lower)) * 100;
+
+  // 추세 방향
+  const trend = slope > 0.0001 ? '상승' : slope < -0.0001 ? '하락' : '횡보';
+
+  return { position: Math.round(position), trend, slope };
+}
+
+/** 일봉 → 주봉/월봉 집계 */
+function aggregateCandles(candles, period) {
+  const groups = {};
+  for (const c of candles) {
+    let key;
+    if (period === 'weekly') {
+      const d = new Date(c.time * 1000 || c.time);
+      const dayOfWeek = d.getDay();
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
+      key = monday.toISOString().slice(0, 10);
+    } else {
+      const d = new Date(c.time * 1000 || c.time);
+      key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  }
+
+  return Object.entries(groups)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, arr]) => ({
+      close: arr[arr.length - 1].close,
+      high: Math.max(...arr.map(c => c.high)),
+      low: Math.min(...arr.map(c => c.low)),
+    }));
+}
+
+function calcRegressionChannels(candles) {
+  if (!candles?.length) return null;
+
+  const monthly = aggregateCandles(candles, 'monthly');
+  const weekly = aggregateCandles(candles, 'weekly');
+  const daily = candles.slice(-120);
+
+  const monthlyReg = linearRegression(monthly.slice(-36).map(c => c.close));
+  const weeklyReg = linearRegression(weekly.slice(-52).map(c => c.close));
+  const dailyReg = linearRegression(daily.map(c => c.close));
+
+  return { monthly: monthlyReg, weekly: weeklyReg, daily: dailyReg };
+}
+
+// ── 최근 급등/급락 추출 ─────────────────────────────────────
+
+function extractRecentMovements(candles) {
+  if (!candles?.length || candles.length < 5) return [];
+
+  const recent = candles.slice(-5);
+  const movements = [];
+
+  for (let i = 1; i < recent.length; i++) {
+    const prev = recent[i - 1];
+    const curr = recent[i];
+    const changePct = ((curr.close - prev.close) / prev.close) * 100;
+    const d = new Date(curr.time * 1000 || curr.time);
+    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+
+    if (Math.abs(changePct) >= 3) {
+      movements.push({
+        date: dateStr,
+        close: curr.close,
+        changePct: changePct.toFixed(2),
+        volume: curr.volume,
+        type: changePct > 0 ? '급등' : '급락',
+      });
+    }
+  }
+
+  return movements;
+}
+
 // ── 유저 프롬프트 빌드 ───────────────────────────────────
 
 function buildUserPrompt(data, dart, images) {
   const sections = [];
 
-  sections.push(`종목: ${data.basic.name} (${data.basic.code})`);
+  // 오늘 날짜
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  sections.push(`오늘 날짜: ${year}년 ${month}월 ${day}일. 제목과 본문의 모든 날짜를 이에 맞출 것. 제목 형식: (${year}.${String(month).padStart(2, '0')})`);
+
+  sections.push(`\n종목: ${data.basic.name} (${data.basic.code})`);
   sections.push(`현재가: ${data.basic.price?.toLocaleString() || 'N/A'}원`);
   sections.push(`등락률: ${data.basic.changePct != null ? data.basic.changePct.toFixed(2) + '%' : 'N/A'}`);
   sections.push(`시장: ${data.basic.market} / ${data.basic.industry}`);
 
-  // 차트 요약
+  // 차트 요약 + 회귀채널
   if (data.chart) {
     sections.push('\n## 차트 데이터');
     sections.push(`데이터 기간: ${data.chart.count}거래일`);
+
     if (data.chart.candles?.length) {
-      const closes = data.chart.candles.map(c => c.close);
+      const candles = data.chart.candles;
+      const closes = candles.map(c => c.close);
       const latest = closes[closes.length - 1];
       const recent252 = closes.slice(-252);
       const high52w = Math.max(...recent252);
@@ -172,7 +159,33 @@ function buildUserPrompt(data, dart, images) {
       sections.push(`52주 최고: ${high52w?.toLocaleString()}원`);
       sections.push(`52주 최저: ${low52w?.toLocaleString()}원`);
       if (high52w !== low52w) {
-        sections.push(`현재가 위치: ${((latest - low52w) / (high52w - low52w) * 100).toFixed(1)}%`);
+        sections.push(`52주 범위 내 위치: ${((latest - low52w) / (high52w - low52w) * 100).toFixed(1)}%`);
+      }
+
+      // 회귀채널 계산
+      const channels = calcRegressionChannels(candles);
+      if (channels) {
+        sections.push('\n### 회귀채널 분석 (2σ 밴드 기준)');
+        if (channels.monthly) {
+          sections.push(`월봉: ${channels.monthly.trend} 추세, 채널 ${channels.monthly.position}% 위치`);
+        }
+        if (channels.weekly) {
+          sections.push(`주봉: ${channels.weekly.trend} 추세, 채널 ${channels.weekly.position}% 위치`);
+        }
+        if (channels.daily) {
+          sections.push(`일봉: ${channels.daily.trend} 추세, 채널 ${channels.daily.position}% 위치`);
+        }
+        sections.push('→ 이 채널% 수치를 본문 "1단계 — 회귀채널"에서 반드시 사용할 것');
+      }
+
+      // 최근 급등/급락
+      const movements = extractRecentMovements(candles);
+      if (movements.length > 0) {
+        sections.push('\n### 최근 급등/급락');
+        for (const m of movements) {
+          sections.push(`${m.date} ${m.type} ${m.changePct}%, 종가 ${m.close.toLocaleString()}원, 거래량 ${m.volume?.toLocaleString()}주`);
+        }
+        sections.push('→ 급등/급락이 있으면 글 시작 "독자 질문 훅"에 이 이벤트를 반영할 것');
       }
     }
   }
@@ -220,10 +233,14 @@ function buildUserPrompt(data, dart, images) {
   if (dart && dart.hits?.length > 0) {
     sections.push('\n## DART 공시 — 히트 항목 (반드시 본문에 반영할 것)');
     for (const hit of dart.hits) {
-      sections.push(`- [${hit.type}] ${hit.report_nm} (${hit.rcept_dt})`);
-      sections.push(`  URL: ${hit.url}`);
-      if (hit.summary) sections.push(`  요약: ${hit.summary}`);
-      sections.push(`  → 이 공시를 본문 "4단계 — 공시/리스크"에서 긍정/부정 양면 해석할 것`);
+      sections.push(`\n### [${hit.type}] ${hit.report_nm} (${hit.rcept_dt})`);
+      sections.push(`URL: ${hit.url}`);
+      if (hit.summary) {
+        sections.push(`상세 데이터:\n${hit.summary}`);
+      } else {
+        sections.push('상세 데이터: 구조화 API 조회 불가 — 공시 제목과 날짜만 참고하여 작성');
+      }
+      sections.push(`→ 이 공시를 본문 "4단계 — 공시/리스크"에서 긍정/부정 양면 해석할 것`);
     }
     if (dart.clean?.length > 0) {
       sections.push(`\n클린 항목 (특이사항 없음): ${dart.clean.join(', ')}`);
@@ -273,9 +290,9 @@ async function generateBlog(data, dart, images, mode = 'sonnet', onProgress = ()
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다');
 
   const model = MODEL_MAP[mode] || MODEL_MAP.sonnet;
+  const systemPrompt = loadSystemPrompt();
   const userPrompt = buildUserPrompt(data, dart, images);
 
-  // 디버그: API에 전달되는 유저 프롬프트 출력
   console.log('=== blog-writer userPrompt ===');
   console.log(userPrompt);
   console.log('=== end userPrompt ===');
@@ -287,7 +304,7 @@ async function generateBlog(data, dart, images, mode = 'sonnet', onProgress = ()
   const response = await client.messages.create({
     model,
     max_tokens: 8000,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
   });
 
