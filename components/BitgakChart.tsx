@@ -2,13 +2,17 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Search } from "lucide-react";
+import { Skeleton } from "@/components/Skeleton";
 import { searchStocks } from "@/lib/stockSearchApi";
 import { fetchStockChart } from "@/lib/stockChartApi";
 import { analyzeBitgak, computeMAArray } from "@/lib/bitgakEngine";
 import type {
   Candle,
   BitgakResult,
+  BitgakMeta,
   BitgakLine,
+  BitgakViewMode,
   ChartRange,
   ChartInterval,
   StockChartResponse,
@@ -20,12 +24,40 @@ const RANGE_OPTIONS: { value: ChartRange; label: string }[] = [
   { value: "3mo", label: "3개월" },
   { value: "6mo", label: "6개월" },
   { value: "1y", label: "1년" },
+  { value: "2y", label: "2년" },
+  { value: "5y", label: "5년" },
 ];
 
 const INTERVAL_OPTIONS: { value: ChartInterval; label: string }[] = [
   { value: "1d", label: "일봉" },
   { value: "1wk", label: "주봉" },
+  { value: "1mo", label: "월봉" },
 ];
+
+// 장기 범위 선택 시 자동 봉 전환 매핑
+const AUTO_INTERVAL: Partial<Record<ChartRange, ChartInterval>> = {
+  "2y": "1wk",
+  "5y": "1mo",
+};
+
+// 기간별 유효한 봉 단위 매핑 (물리적으로 분석 불가능한 조합 차단)
+const VALID_INTERVALS: Record<ChartRange, ChartInterval[]> = {
+  "1mo": ["1d"],
+  "3mo": ["1d", "1wk"],
+  "6mo": ["1d", "1wk"],
+  "1y": ["1d", "1wk", "1mo"],
+  "2y": ["1d", "1wk", "1mo"],
+  "5y": ["1d", "1wk", "1mo"],
+};
+
+function applyOpacity(hex: string, opacity: number): string {
+  if (opacity >= 1) return hex;
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${opacity})`;
+}
 
 const MA_CONFIGS = [
   { period: 5, color: "#fbbf24", label: "MA5" },
@@ -34,11 +66,12 @@ const MA_CONFIGS = [
 ] as const;
 
 interface Props {
-  onAnalysisReady?: (summary: string, stockName: string, indicators?: TechIndicators) => void;
+  onAnalysisReady?: (summary: string, stockName: string, indicators?: TechIndicators, meta?: BitgakMeta) => void;
   externalSymbol?: { symbol: string; name: string } | null;
+  onExternalClear?: () => void;
 }
 
-export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
+export function BitgakChart({ onAnalysisReady, externalSymbol, onExternalClear }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof import("lightweight-charts").createChart> | null>(null);
   const [query, setQuery] = useState("");
@@ -50,14 +83,27 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
   const [chartData, setChartData] = useState<StockChartResponse | null>(null);
   const [bitgakResult, setBitgakResult] = useState<BitgakResult | null>(null);
   const [showMA, setShowMA] = useState(true);
+  const [logScale, setLogScale] = useState(false);
+  const [viewMode, setViewMode] = useState<BitgakViewMode>("auto");
   const [containerWidth, setContainerWidth] = useState(600);
 
   const [suggestions, setSuggestions] = useState<{ symbol: string; name: string }[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 외부에서 종목 전달 시
+  // 외부에서 종목 전달 시 (한글 심볼이면 검색 API로 실제 심볼 조회)
   useEffect(() => {
     if (externalSymbol && externalSymbol.symbol !== selected?.symbol) {
+      const isKoreanSymbol = /[가-힣]/.test(externalSymbol.symbol);
+      if (isKoreanSymbol) {
+        searchStocks(externalSymbol.name).then((results) => {
+          if (results.length > 0) {
+            setSelected({ symbol: results[0].symbol, name: results[0].name });
+            setQuery(results[0].name);
+          }
+        }).catch(() => {});
+        setQuery(externalSymbol.name);
+        return;
+      }
       setSelected(externalSymbol);
       setQuery(externalSymbol.name);
       setError(null);
@@ -100,13 +146,26 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
     setError(null);
   }, []);
 
+  const handleRangeChange = useCallback((newRange: ChartRange) => {
+    setRange(newRange);
+    const autoInterval = AUTO_INTERVAL[newRange];
+    if (autoInterval) {
+      setInterval(autoInterval);
+    } else {
+      // 현재 봉이 새 범위에서 유효하지 않으면 첫 번째 유효 봉으로 전환
+      const valid = VALID_INTERVALS[newRange];
+      setInterval((prev) => valid.includes(prev) ? prev : valid[0]);
+    }
+  }, []);
+
   const resetStock = useCallback(() => {
     setQuery("");
     setSelected(null);
     setChartData(null);
     setBitgakResult(null);
     setError(null);
-  }, []);
+    onExternalClear?.();
+  }, [onExternalClear]);
 
   // 차트 데이터 로드
   useEffect(() => {
@@ -119,9 +178,9 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
       .then((data) => {
         if (cancelled) return;
         setChartData(data);
-        const result = analyzeBitgak(data.candles);
+        const result = analyzeBitgak(data.candles, interval, logScale, viewMode);
         setBitgakResult(result);
-        onAnalysisReady?.(result.summary, selected.name, result.indicators);
+        onAnalysisReady?.(result.summary, selected.name, result.indicators, result.meta);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -132,7 +191,17 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
       });
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, range, interval, onAnalysisReady]);
+
+  // logScale / viewMode 변경 시 빗각 재계산 (API 재호출 없이)
+  useEffect(() => {
+    if (!chartData || !selected) return;
+    const result = analyzeBitgak(chartData.candles, interval, logScale, viewMode);
+    setBitgakResult(result);
+    onAnalysisReady?.(result.summary, selected.name, result.indicators, result.meta);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logScale, viewMode]);
 
   const chartHeight = Math.min(containerWidth * 0.55, 400);
 
@@ -143,7 +212,7 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
     let chart: ReturnType<typeof import("lightweight-charts").createChart> | null = null;
 
     (async () => {
-      const { createChart, CandlestickSeries, LineSeries, HistogramSeries, createSeriesMarkers } = await import("lightweight-charts");
+      const { createChart, CandlestickSeries, LineSeries, HistogramSeries, createSeriesMarkers, PriceScaleMode } = await import("lightweight-charts");
 
       const container = chartContainerRef.current;
       if (!container) return;
@@ -170,7 +239,10 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
           horzLine: { color: "rgba(59,130,246,0.3)", width: 1, style: 2 },
         },
         rightPriceScale: {
-          borderColor: "rgba(255,255,255,0.1)",
+          mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+          autoScale: true,
+          borderVisible: false,
+          scaleMargins: { top: 0.1, bottom: 0.2 },
         },
         timeScale: {
           borderColor: "rgba(255,255,255,0.1)",
@@ -252,13 +324,17 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
             value: p.value,
           }));
 
+          const lineColor = applyOpacity(line.color, line.opacity ?? 1);
           const lineSeries = chart.addSeries(LineSeries, {
-            color: line.color,
-            lineWidth: line.type === "midline" ? 1 : 2,
+            color: lineColor,
+            lineWidth: line.type === "midline" ? 1 : line.type === "trend_line" ? 2 : 2,
             lineStyle: line.style === "dashed" ? 1 : 0,
             crosshairMarkerVisible: false,
             lastValueVisible: false,
             priceLineVisible: false,
+            autoscaleInfoProvider: () => ({
+              priceRange: null,
+            }),
           });
           lineSeries.setData(lineData);
         }
@@ -306,12 +382,12 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
         chartRef.current = null;
       }
     };
-  }, [chartData, bitgakResult, showMA, chartHeight]);
+  }, [chartData, bitgakResult, showMA, logScale, chartHeight]);
 
   const showDropdown = suggestions.length > 0;
 
   return (
-    <div className="glass-card rounded-xl p-4 relative overflow-visible">
+    <div className="glass-card rounded-2xl p-5 relative overflow-visible">
       {/* 헤더 */}
       <div className="flex items-center gap-2 mb-3">
         <span className="text-base">📐</span>
@@ -322,6 +398,7 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
       {/* 검색창 */}
       <div className="relative z-50">
         <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400/70" />
           <input
             type="text"
             value={query}
@@ -332,13 +409,13 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
                 setQuery(e.target.value);
               }
             }}
-            placeholder="종목명 검색 (예: 삼성전자, SK하이닉스)"
-            className="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 text-sm font-mono text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 transition-colors pr-8"
+            placeholder="종목명을 입력하세요"
+            className="w-full pl-9 pr-8 py-3 rounded-xl bg-white dark:bg-white/[0.07] border-2 border-blue-400/30 dark:border-blue-400/25 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/20 focus:shadow-[0_0_16px_rgba(59,130,246,0.12)] transition-all"
           />
           {selected && (
             <button
               onClick={resetStock}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white text-sm"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white text-sm"
             >
               ✕
             </button>
@@ -377,11 +454,11 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
             {RANGE_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => setRange(opt.value)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors ${
+                onClick={() => handleRangeChange(opt.value)}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors ${
                   range === opt.value
                     ? "bg-blue-500 text-white"
-                    : "bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/20"
+                    : "bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-white/20"
                 }`}
               >
                 {opt.label}
@@ -390,40 +467,71 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
           </div>
           <div className="w-px h-4 bg-gray-300 dark:bg-white/20" />
           <div className="flex gap-1">
-            {INTERVAL_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setInterval(opt.value)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors ${
-                  interval === opt.value
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/20"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+            {INTERVAL_OPTIONS.map((opt) => {
+              const isValid = VALID_INTERVALS[range]?.includes(opt.value) ?? true;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => isValid && setInterval(opt.value)}
+                  disabled={!isValid}
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors ${
+                    !isValid
+                      ? "bg-gray-100 dark:bg-white/5 text-gray-300 dark:text-zinc-600 cursor-not-allowed"
+                      : interval === opt.value
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-white/20"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
           <div className="w-px h-4 bg-gray-300 dark:bg-white/20" />
           <button
             onClick={() => setShowMA((v) => !v)}
-            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors ${
+            className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors ${
               showMA
                 ? "bg-amber-500/20 text-amber-500 border border-amber-500/30"
-                : "bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400"
+                : "bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-zinc-400"
             }`}
           >
             MA
           </button>
+          <button
+            onClick={() => setLogScale((v) => !v)}
+            className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors ${
+              logScale
+                ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30"
+                : "bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-zinc-400"
+            }`}
+          >
+            LOG
+          </button>
+          <div className="w-px h-4 bg-gray-300 dark:bg-white/20" />
+          {([
+            { value: "auto" as const, label: "자동", activeClass: "bg-purple-500/20 text-purple-400 border border-purple-500/30" },
+            { value: "bullish" as const, label: "상승", activeClass: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" },
+            { value: "bearish" as const, label: "하락", activeClass: "bg-red-500/20 text-red-400 border border-red-500/30" },
+          ]).map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setViewMode(opt.value)}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors ${
+                viewMode === opt.value
+                  ? opt.activeClass
+                  : "bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-zinc-400"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       )}
 
       {/* 로딩 */}
       {isLoading && (
-        <div className="mt-3 flex items-center gap-2 text-xs text-gray-400 font-mono">
-          <span className="inline-block w-3.5 h-3.5 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 rounded-full animate-spin" />
-          차트 데이터 로딩 중...
-        </div>
+        <Skeleton variant="card" className="mt-3 h-[220px]" />
       )}
 
       {/* 에러 */}
@@ -462,7 +570,7 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
             {bitgakResult.lines.map((line: BitgakLine, i: number) => (
               <span
                 key={i}
-                className="inline-flex items-center gap-1.5 text-[10px] text-gray-600 dark:text-gray-300 font-mono"
+                className="inline-flex items-center gap-1.5 text-[10px] text-gray-600 dark:text-zinc-300 font-mono"
               >
                 <span
                   className="inline-block w-3 h-[2px]"
@@ -472,7 +580,7 @@ export function BitgakChart({ onAnalysisReady, externalSymbol }: Props) {
               </span>
             ))}
           </div>
-          <div className="mt-2 text-[10px] text-gray-500 dark:text-gray-400 font-mono leading-relaxed whitespace-pre-line">
+          <div className="mt-2 text-[10px] text-gray-500 dark:text-zinc-400 font-mono leading-relaxed whitespace-pre-line">
             {bitgakResult.summary}
           </div>
         </div>

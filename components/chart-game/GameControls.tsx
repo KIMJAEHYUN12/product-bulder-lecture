@@ -13,7 +13,7 @@ export function GameControls({ onGuess, disabled }: Props) {
       <motion.button
         onClick={() => onGuess("up")}
         disabled={disabled}
-        className="relative overflow-hidden py-4 sm:py-5 rounded-xl font-black text-white text-base sm:text-lg bg-gradient-to-br from-red-500 to-red-700 shadow-lg shadow-red-900/40 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="relative overflow-hidden py-4 sm:py-5 rounded-xl font-black text-white text-base sm:text-lg bg-red-600 hover:bg-red-500 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-300"
         whileTap={{ scale: 0.93 }}
         whileHover={{ scale: 1.02 }}
       >
@@ -26,7 +26,7 @@ export function GameControls({ onGuess, disabled }: Props) {
       <motion.button
         onClick={() => onGuess("down")}
         disabled={disabled}
-        className="relative overflow-hidden py-4 sm:py-5 rounded-xl font-black text-white text-base sm:text-lg bg-gradient-to-br from-blue-500 to-blue-700 shadow-lg shadow-blue-900/40 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="relative overflow-hidden py-4 sm:py-5 rounded-xl font-black text-white text-base sm:text-lg bg-blue-600 hover:bg-blue-500 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-300"
         whileTap={{ scale: 0.93 }}
         whileHover={{ scale: 1.02 }}
       >

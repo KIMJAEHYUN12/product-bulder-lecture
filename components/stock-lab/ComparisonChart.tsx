@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
+import { Skeleton } from "@/components/Skeleton";
 import type { StockChartResponse, ChartRange, Candle } from "@/types";
 
 const STOCK_COLORS = ["#ef4444", "#3b82f6", "#10b981"];
@@ -157,9 +158,7 @@ export function ComparisonChart({ stocks, chartDataMap, range, onRangeChange, is
           style={{ minHeight: 220 }}
         />
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl">
-            <span className="inline-block w-5 h-5 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin" />
-          </div>
+          <Skeleton variant="card" className="absolute inset-0" />
         )}
       </div>
 
@@ -169,7 +168,7 @@ export function ComparisonChart({ stocks, chartDataMap, range, onRangeChange, is
           <button
             key={opt.value}
             onClick={() => onRangeChange(opt.value)}
-            className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors ${
+            className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${
               range === opt.value
                 ? "bg-blue-500 text-white"
                 : "bg-white/10 text-gray-400 hover:bg-white/20"

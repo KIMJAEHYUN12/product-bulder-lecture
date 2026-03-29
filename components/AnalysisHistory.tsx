@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { StaggerContainer } from "@/components/StaggerContainer";
 import type { AnalysisHistoryItem } from "@/types";
 
 const STORAGE_KEY = "ovision_bitgak_history";
-const MAX_ITEMS = 10;
+const MAX_ITEMS = 4;
 
 function loadHistory(): AnalysisHistoryItem[] {
   if (typeof window === "undefined") return [];
@@ -58,7 +59,7 @@ export function AnalysisHistory({ onSelect }: Props) {
   };
 
   return (
-    <div className="glass-card rounded-xl p-4">
+    <div className="glass-card rounded-2xl p-5">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="text-base">📋</span>
@@ -77,7 +78,7 @@ export function AnalysisHistory({ onSelect }: Props) {
       {history.length === 0 ? (
         <p className="text-xs text-gray-400 font-mono py-2">분석 기록이 없습니다</p>
       ) : (
-        <div className="space-y-1">
+        <StaggerContainer className="space-y-1">
           {history.map((h, i) => (
             <button
               key={`${h.symbol}-${h.date}-${i}`}
@@ -89,15 +90,15 @@ export function AnalysisHistory({ onSelect }: Props) {
                   <span className="text-xs font-semibold text-gray-900 dark:text-white group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors truncate max-w-[100px]">
                     {h.name}
                   </span>
-                  <span className={`text-[9px] font-mono px-1 py-0.5 rounded ${
-                    h.channelDir === "상승" ? "bg-red-500/10 text-red-500"
-                    : h.channelDir === "하락" ? "bg-blue-500/10 text-blue-500"
-                    : "bg-gray-500/10 text-gray-400"
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ring-1 ${
+                    h.channelDir === "상승" ? "bg-red-500/10 text-red-500 ring-red-500/20"
+                    : h.channelDir === "하락" ? "bg-blue-500/10 text-blue-500 ring-blue-500/20"
+                    : "bg-gray-500/10 text-gray-400 ring-gray-500/20"
                   }`}>
                     {h.channelDir}
                   </span>
                 </div>
-                <span className="text-[9px] text-gray-400 font-mono">{h.date}</span>
+                <span className="text-[10px] text-gray-400 font-mono">{h.date}</span>
               </div>
               <div className="text-right shrink-0">
                 <span className={`text-[10px] font-bold ${
@@ -108,7 +109,7 @@ export function AnalysisHistory({ onSelect }: Props) {
               </div>
             </button>
           ))}
-        </div>
+        </StaggerContainer>
       )}
     </div>
   );

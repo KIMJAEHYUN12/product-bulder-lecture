@@ -14,12 +14,17 @@ import {
   fetchMyChartGameRank,
 } from "@/lib/chartGameRankingApi";
 import { useAuth } from "@/hooks/useAuth";
+import { LoginButton } from "@/components/mock/LoginButton";
+import { AdSlot } from "@/components/AdSlot";
+import CrossNavigation from "@/components/CrossNavigation";
+import { grantExp } from "@/lib/rpgExp";
+import { claimChartStreakStone } from "@/lib/stoneReward";
 import type { GamePhase, GameRound, ChartGameRankingEntry } from "@/types";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
 export default function ChartGamePage() {
-  const { user, signInWithGoogle } = useAuth();
+  const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth();
   const [phase, setPhase] = useState<GamePhase>("intro");
   const [currentRound, setCurrentRound] = useState<GameRound | null>(null);
   const [streak, setStreak] = useState(0);
@@ -112,8 +117,13 @@ export default function ChartGamePage() {
     setTotalGames((g) => g + 1);
 
     if (correct) {
-      setStreak((s) => s + 1);
+      const newStreak = streak + 1;
+      setStreak(newStreak);
       setTotalCorrect((c) => c + 1);
+      grantExp("chart_game_correct");
+      if (newStreak >= 5 && newStreak % 5 === 0) {
+        claimChartStreakStone();
+      }
       setPhase("result");
     } else {
       setPhase("result");
@@ -161,13 +171,28 @@ export default function ChartGamePage() {
   }, [user, streak, totalGames, totalCorrect, loadRankings]);
 
   // Share
+  const [shareToast, setShareToast] = useState(false);
+
   const handleShare = useCallback(() => {
-    const text = `오비젼 차트 업다운 게임에서 ${streak}연승! 🔥\n도전해봐 👉 https://mylen-24263782-5d205.web.app/chart-game`;
+    const text = `오비젼 차트 업다운 게임에서 ${streak}연승!\n도전해봐 👉 https://bitgak.co.kr/chart-game`;
     if (navigator.share) {
       navigator.share({ text }).catch(() => {});
     } else {
-      navigator.clipboard.writeText(text).then(() => alert("복사되었습니다!")).catch(() => {});
+      navigator.clipboard.writeText(text).then(() => {
+        setShareToast(true);
+        setTimeout(() => setShareToast(false), 2000);
+      }).catch(() => {});
     }
+  }, [streak]);
+
+  const handleTwitterShare = useCallback(() => {
+    const text = `차트 업다운 게임 ${streak}연승! — 오비젼`;
+    const url = "https://bitgak.co.kr/chart-game";
+    window.open(
+      `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   }, [streak]);
 
   const savedNickname = typeof window !== "undefined" && user
@@ -193,7 +218,10 @@ export default function ChartGamePage() {
           <h1 className="text-base sm:text-lg font-black flex items-center gap-2">
             📊 차트 업다운
           </h1>
-          <StreakCounter streak={streak} />
+          <div className="flex items-center gap-2">
+            <StreakCounter streak={streak} />
+            <LoginButton user={user} loading={authLoading} onSignIn={signInWithGoogle} onSignOut={signOut} />
+          </div>
         </div>
 
         {/* ── Chart: stays mounted across phases ── */}
@@ -234,7 +262,7 @@ export default function ChartGamePage() {
 
               <motion.button
                 onClick={startGame}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 text-white font-black text-lg shadow-lg shadow-red-900/40"
+                className="w-full py-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-lg shadow-lg transition-all duration-300"
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.02 }}
               >
@@ -338,7 +366,7 @@ export default function ChartGamePage() {
               {isCorrect && (
                 <motion.button
                   onClick={nextRound}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-black shadow-lg"
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black shadow-lg transition-all duration-300"
                   whileTap={{ scale: 0.95 }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -390,7 +418,7 @@ export default function ChartGamePage() {
               {user && streak > 0 && !pendingSave && (
                 <motion.button
                   onClick={() => setShowNicknameModal(true)}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-black shadow-lg"
+                  className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black shadow-lg transition-all duration-300"
                   whileTap={{ scale: 0.95 }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -417,10 +445,10 @@ export default function ChartGamePage() {
                 <div className="text-center text-xs text-gray-500 font-mono">저장 중...</div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 <motion.button
                   onClick={startGame}
-                  className="py-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 text-white font-black shadow-lg"
+                  className="py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black shadow-lg text-sm transition-all duration-300"
                   whileTap={{ scale: 0.95 }}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -436,7 +464,17 @@ export default function ChartGamePage() {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.6 }}
                 >
-                  📤 공유하기
+                  {shareToast ? "복사됨!" : "공유하기"}
+                </motion.button>
+                <motion.button
+                  onClick={handleTwitterShare}
+                  className="py-3 rounded-xl bg-black border border-white/20 text-white font-bold text-sm hover:bg-white/10 transition-colors"
+                  whileTap={{ scale: 0.95 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.7 }}
+                >
+                  X 공유
                 </motion.button>
               </div>
 
@@ -448,9 +486,13 @@ export default function ChartGamePage() {
                 limit={20}
                 onRefresh={() => loadRankings(20)}
               />
+
+              <AdSlot />
             </motion.div>
           )}
         </AnimatePresence>
+
+        <CrossNavigation currentPath="/chart-game" />
       </div>
 
       {/* Nickname Modal */}
@@ -541,7 +583,7 @@ function RankingPreview({
                   <div className="col-span-5 min-w-0">
                     <div className={`truncate font-semibold ${isMe ? "text-orange-400" : "text-white"}`}>
                       {entry.nickname}
-                      {isMe && <span className="ml-1 text-[9px] text-orange-400/70">나</span>}
+                      {isMe && <span className="ml-1 text-[10px] text-orange-400/70">나</span>}
                     </div>
                   </div>
                   <span className="col-span-3 text-right font-bold text-orange-400">
@@ -568,7 +610,7 @@ function RankingPreview({
                   <div className="col-span-5 min-w-0">
                     <div className="truncate font-semibold text-orange-400">
                       {myRank.entry.nickname}
-                      <span className="ml-1 text-[9px] text-orange-400/70">나</span>
+                      <span className="ml-1 text-[10px] text-orange-400/70">나</span>
                     </div>
                   </div>
                   <span className="col-span-3 text-right font-bold text-orange-400">

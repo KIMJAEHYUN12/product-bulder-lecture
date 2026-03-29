@@ -1,0 +1,1214 @@
+"use client";
+
+import { useRef, useEffect, useCallback, useState } from "react";
+import type { Candle, InvestorTrendDaily } from "@/types";
+
+type ChannelMode = "long" | "short";
+type ChartView = "trend" | "horizontal";
+type CandleInterval = "day" | "week" | "month";
+
+interface Props {
+  candles: Candle[];
+  investorDaily: InvestorTrendDaily[];
+  height?: number;
+}
+
+const toDateStr = (ts: number) => {
+  const d = new Date(ts * 1000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+const normalizeDateStr = (raw: string) => {
+  if (raw.length === 8 && !raw.includes("-")) {
+    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+  }
+  return raw;
+};
+
+/** 일봉 → 주봉/월봉 리샘플링 */
+function resampleCandles(candles: Candle[], interval: CandleInterval): Candle[] {
+  if (interval === "day" || candles.length === 0) return candles;
+
+  const getKey = (ts: number): string => {
+    const d = new Date(ts * 1000);
+    if (interval === "month") {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    }
+    // week: ISO week (월요일 기준)
+    const day = d.getDay() || 7;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - day + 1);
+    return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+  };
+
+  const groups: Map<string, Candle[]> = new Map();
+  for (const c of candles) {
+    const key = getKey(c.time);
+    const arr = groups.get(key);
+    if (arr) arr.push(c);
+    else groups.set(key, [c]);
+  }
+
+  const result: Candle[] = [];
+  for (const group of groups.values()) {
+    result.push({
+      time: group[0].time,
+      open: group[0].open,
+      high: Math.max(...group.map((c) => c.high)),
+      low: Math.min(...group.map((c) => c.low)),
+      close: group[group.length - 1].close,
+      volume: group.reduce((s, c) => s + c.volume, 0),
+    });
+  }
+  return result;
+}
+
+/** 수급 데이터 리샘플링 */
+function resampleTrend(daily: InvestorTrendDaily[], interval: CandleInterval): InvestorTrendDaily[] {
+  if (interval === "day" || daily.length === 0) return daily;
+
+  const getKey = (raw: string): string => {
+    const d = raw.replace(/-/g, "");
+    const year = d.slice(0, 4);
+    const month = d.slice(4, 6);
+    const day = d.slice(6, 8);
+    if (interval === "month") return `${year}-${month}`;
+    const date = new Date(+year, +month - 1, +day);
+    const dow = date.getDay() || 7;
+    const monday = new Date(date);
+    monday.setDate(date.getDate() - dow + 1);
+    return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+  };
+
+  const groups: Map<string, InvestorTrendDaily[]> = new Map();
+  for (const d of daily) {
+    const norm = normalizeDateStr(d.date);
+    const key = getKey(norm);
+    const arr = groups.get(key);
+    if (arr) arr.push(d);
+    else groups.set(key, [d]);
+  }
+
+  const result: InvestorTrendDaily[] = [];
+  for (const group of groups.values()) {
+    result.push({
+      date: group[0].date,
+      foreign: group.reduce((s, d) => s + d.foreign, 0),
+      institution: group.reduce((s, d) => s + d.institution, 0),
+      individual: group.reduce((s, d) => s + d.individual, 0),
+    });
+  }
+  return result;
+}
+
+/** 수급 숫자 포맷: 한국식 억/만 단위 */
+function fmtVolume(n: number): string {
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (abs >= 100_000_000) return sign + (abs / 100_000_000).toFixed(1) + "억";
+  if (abs >= 10_000) return sign + Math.round(abs / 10_000).toLocaleString() + "만";
+  if (abs >= 1_000) return n.toLocaleString();
+  return n.toLocaleString();
+}
+
+interface RegressionResult {
+  slope: number;
+  intercept: number;
+  sigma: number;
+  offset: number;
+  sliceLen: number;
+}
+
+function computeRegressionChannel(
+  candles: Candle[],
+  mode: ChannelMode,
+): RegressionResult | null {
+  const shortLen = candles.length >= 60 ? 60 : Math.max(Math.floor(candles.length / 3), 2);
+  const offset = mode === "short" ? Math.max(candles.length - shortLen, 0) : 0;
+  const slice = candles.slice(offset);
+  const n = slice.length;
+  if (n < 2) return null;
+
+  // 지수 가중치: 최근 데이터에 더 큰 비중
+  // halfLife = n/4 → 최근 25% 구간이 가중치의 절반을 차지
+  const halfLife = n / 4;
+  const lambda = Math.LN2 / halfLife;
+
+  let sumW = 0, sumWX = 0, sumWY = 0, sumWXY = 0, sumWX2 = 0;
+  for (let i = 0; i < n; i++) {
+    const w = Math.exp(lambda * (i - (n - 1)));
+    const y = (slice[i].high + slice[i].low) / 2;
+    sumW += w;
+    sumWX += w * i;
+    sumWY += w * y;
+    sumWXY += w * i * y;
+    sumWX2 += w * i * i;
+  }
+  const denom = sumW * sumWX2 - sumWX * sumWX;
+  if (denom === 0) return null;
+
+  const slope = (sumW * sumWXY - sumWX * sumWY) / denom;
+  const intercept = (sumWY - slope * sumWX) / sumW;
+
+  // 가중 잔차 표준편차
+  let sumWResidSq = 0;
+  for (let i = 0; i < n; i++) {
+    const w = Math.exp(lambda * (i - (n - 1)));
+    const y = (slice[i].high + slice[i].low) / 2;
+    const yHat = intercept + slope * i;
+    sumWResidSq += w * (y - yHat) ** 2;
+  }
+  const sigma = Math.sqrt(sumWResidSq / sumW);
+
+  return { slope, intercept, sigma, offset, sliceLen: n };
+}
+
+/** 피봇 고점/저점 기반 수평 매물대 7개 계산 */
+function computeHorizontalLevels(candles: Candle[], count = 7): number[] {
+  if (candles.length < 5) return [];
+
+  // 피봇 고점/저점 수집 (좌우 5봉 비교)
+  const pivots: { price: number; strength: number }[] = [];
+  const lookback = 5;
+  for (let i = lookback; i < candles.length - lookback; i++) {
+    let isHigh = true;
+    let isLow = true;
+    for (let j = 1; j <= lookback; j++) {
+      if (candles[i].high <= candles[i - j].high || candles[i].high <= candles[i + j].high) isHigh = false;
+      if (candles[i].low >= candles[i - j].low || candles[i].low >= candles[i + j].low) isLow = false;
+    }
+    if (isHigh) pivots.push({ price: candles[i].high, strength: 1 });
+    if (isLow) pivots.push({ price: candles[i].low, strength: 1 });
+  }
+
+  if (pivots.length === 0) {
+    const prices = candles.map((c) => c.close);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    return Array.from({ length: count }, (_, i) => min + ((max - min) * i) / (count - 1));
+  }
+
+  // 가격 클러스터링: 근접한 피봇끼리 묶기
+  pivots.sort((a, b) => a.price - b.price);
+  const range = pivots[pivots.length - 1].price - pivots[0].price;
+  const threshold = range * 0.02;
+
+  const clusters: { price: number; weight: number }[] = [];
+  let cluster = { sum: pivots[0].price, weight: 1 };
+  for (let i = 1; i < pivots.length; i++) {
+    if (pivots[i].price - cluster.sum / cluster.weight < threshold) {
+      cluster.sum += pivots[i].price;
+      cluster.weight += 1;
+    } else {
+      clusters.push({ price: cluster.sum / cluster.weight, weight: cluster.weight });
+      cluster = { sum: pivots[i].price, weight: 1 };
+    }
+  }
+  clusters.push({ price: cluster.sum / cluster.weight, weight: cluster.weight });
+
+  // 가중치 순 정렬 후 상위 count개 선택, 가격순 재정렬
+  clusters.sort((a, b) => b.weight - a.weight);
+  const top = clusters.slice(0, count);
+  top.sort((a, b) => a.price - b.price);
+  return top.map((c) => c.price);
+}
+
+function buildRegressionMarkers(
+  candles: Candle[],
+  reg: RegressionResult,
+  trendMap: Map<string, InvestorTrendDaily>,
+) {
+  type Shape = "arrowDown" | "arrowUp" | "square";
+  const markers: {
+    time: string;
+    position: "aboveBar" | "belowBar";
+    color: string;
+    shape: Shape;
+    text: string;
+    size: number;
+  }[] = [];
+
+  for (let idx = 0; idx < candles.length; idx++) {
+    const localIdx = idx - reg.offset;
+    if (localIdx < 0 || localIdx >= reg.sliceLen) continue;
+
+    const c = candles[idx];
+    const dateStr = toDateStr(c.time);
+    const mid = reg.intercept + reg.slope * localIdx;
+    const top2 = mid + 2 * reg.sigma;
+    const top1 = mid + 1.3 * reg.sigma;
+    const bot2 = mid - 2 * reg.sigma;
+    const bot1 = mid - 1.3 * reg.sigma;
+
+    const trend = trendMap.get(dateStr);
+    const instBuy = trend ? trend.institution > 0 : false;
+    const forBuy = trend ? trend.foreign > 0 : false;
+    const instSell = trend ? trend.institution < 0 : false;
+    const forSell = trend ? trend.foreign < 0 : false;
+
+    // Buy: 하단 지지선 터치
+    if (c.low <= bot2 || c.low <= bot1) {
+      const strong = (instBuy || forBuy);
+      markers.push({
+        time: dateStr,
+        position: "belowBar",
+        color: strong ? "#4ade80" : "rgba(134,239,172,0.5)",
+        shape: strong ? "square" : "arrowUp",
+        text: "",
+        size: strong ? 2 : 1,
+      });
+    }
+
+    // Sell: 상단 저항선 터치
+    if (c.close > top2 || c.high >= top1) {
+      const strong = (instSell && forSell);
+      markers.push({
+        time: dateStr,
+        position: "aboveBar",
+        color: strong ? "#f87171" : "rgba(252,165,165,0.5)",
+        shape: strong ? "square" : "arrowDown",
+        text: "",
+        size: strong ? 2 : 1,
+      });
+    }
+  }
+  return markers;
+}
+
+type ViewportPeriod = "2M" | "3M" | "6M" | "1Y" | "2Y" | "5Y" | "MAX";
+
+const VIEWPORT_BARS: Record<ViewportPeriod, number | null> = {
+  "2M": 40,
+  "3M": 66,
+  "6M": 130,
+  "1Y": 250,
+  "2Y": 500,
+  "5Y": 1250,
+  "MAX": null,
+};
+
+const VIEWPORT_OPTIONS: { value: ViewportPeriod; label: string }[] = [
+  { value: "2M", label: "기본" },
+  { value: "3M", label: "3M" },
+  { value: "6M", label: "6M" },
+  { value: "1Y", label: "1Y" },
+  { value: "2Y", label: "2Y" },
+  { value: "5Y", label: "5Y" },
+  { value: "MAX", label: "MAX" },
+];
+
+export function StockChart({ candles, investorDaily, height }: Props) {
+  const [chartView, setChartView] = useState<ChartView>("trend");
+  const [channelMode, setChannelMode] = useState<ChannelMode>("long");
+  const [candleInterval, setCandleInterval] = useState<CandleInterval>("day");
+  const [supplyLabel, setSupplyLabel] = useState<string | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
+  const [showTip, setShowTip] = useState(false);
+  const [showDailyDetail, setShowDailyDetail] = useState(false);
+  const [dailyTab, setDailyTab] = useState<"basic" | "supply">("basic");
+  const [viewportPeriod, setViewportPeriod] = useState<ViewportPeriod>("2M");
+  const [showLatestBtn, setShowLatestBtn] = useState(false);
+  const totalBarsRef = useRef(0);
+
+  useEffect(() => {
+    const key = "ss_guide_seen";
+    if (typeof window !== "undefined" && !localStorage.getItem(key)) {
+      setShowTip(true);
+      const t = setTimeout(() => {
+        setShowTip(false);
+        localStorage.setItem(key, "1");
+      }, 3000);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  // candles 변경 시 뷰포트 리셋
+  useEffect(() => {
+    setViewportPeriod("2M");
+  }, [candles]);
+
+  const priceContainerRef = useRef<HTMLDivElement>(null);
+  const supplyContainerRef = useRef<HTMLDivElement>(null);
+  const priceChartRef = useRef<ReturnType<typeof import("lightweight-charts").createChart> | null>(null);
+  const supplyChartRef = useRef<ReturnType<typeof import("lightweight-charts").createChart> | null>(null);
+  const isSyncingRef = useRef(false);
+
+  const handleViewport = useCallback((period: ViewportPeriod) => {
+    setViewportPeriod(period);
+    const pc = priceChartRef.current;
+    const sc = supplyChartRef.current;
+    if (!pc || !sc) return;
+
+    const bars = VIEWPORT_BARS[period];
+    if (bars === null) {
+      pc.timeScale().fitContent();
+      sc.timeScale().fitContent();
+    } else {
+      const total = totalBarsRef.current;
+      const from = total - bars;
+      const to = total - 1 + 2;
+      pc.timeScale().setVisibleLogicalRange({ from, to });
+      sc.timeScale().setVisibleLogicalRange({ from, to });
+    }
+  }, []);
+
+  const getChartHeight = useCallback(
+    (ratio: number) => {
+      if (!priceContainerRef.current) return 200;
+      const totalH = height ?? Math.min(priceContainerRef.current.clientWidth * 0.8, 520);
+      return Math.round(totalH * ratio);
+    },
+    [height],
+  );
+
+  useEffect(() => {
+    if (!candles.length || !priceContainerRef.current || !supplyContainerRef.current) return;
+
+    let priceChart: ReturnType<typeof import("lightweight-charts").createChart> | null = null;
+    let supplyChart: ReturnType<typeof import("lightweight-charts").createChart> | null = null;
+    let ro: ResizeObserver | null = null;
+
+    (async () => {
+      const {
+        createChart,
+        CandlestickSeries,
+        LineSeries,
+        AreaSeries,
+        HistogramSeries,
+        createSeriesMarkers,
+      } = await import("lightweight-charts");
+
+      const priceEl = priceContainerRef.current;
+      const supplyEl = supplyContainerRef.current;
+      if (!priceEl || !supplyEl) return;
+
+      if (priceChartRef.current) {
+        priceChartRef.current.remove();
+        priceChartRef.current = null;
+      }
+      if (supplyChartRef.current) {
+        supplyChartRef.current.remove();
+        supplyChartRef.current = null;
+      }
+
+      // 리샘플링 (주봉/월봉)
+      const rCandles = resampleCandles(candles, candleInterval);
+      const rInvestor = resampleTrend(investorDaily, candleInterval);
+
+      const priceH = getChartHeight(0.7);
+      const supplyH = getChartHeight(0.3);
+      const isMobile = priceEl.clientWidth < 640;
+
+      const monoFont = isMobile
+        ? "monospace"
+        : "var(--font-geist-mono), ui-monospace, monospace";
+      const fmtPrice = (v: number) => v.toLocaleString("ko-KR", { maximumFractionDigits: 0 });
+      const commonLayout = {
+        layout: {
+          background: { color: "transparent" },
+          textColor: isMobile ? "#e5e7eb" : "#9ca3af",
+          fontSize: isMobile ? 9 : 10,
+          fontFamily: monoFont,
+        },
+        grid: {
+          vertLines: { color: "rgba(255,255,255,0.04)" },
+          horzLines: { color: "rgba(255,255,255,0.04)" },
+        },
+        crosshair: {
+          vertLine: { color: "rgba(99,102,241,0.4)", width: 1 as const, style: 2 as const },
+          horzLine: { color: "rgba(99,102,241,0.4)", width: 1 as const, style: 2 as const },
+        },
+        rightPriceScale: {
+          borderVisible: false,
+          scaleMargins: { top: 0.08, bottom: 0.08 },
+          minimumWidth: isMobile ? 80 : 90,
+          entireTextOnly: true,
+          ticksVisible: false,
+        },
+        localization: {
+          priceFormatter: fmtPrice,
+        },
+        timeScale: {
+          borderColor: "rgba(255,255,255,0.06)",
+          timeVisible: false,
+        },
+        handleScroll: { vertTouchDrag: false },
+        handleScale: { axisPressedMouseMove: true, pinch: true, mouseWheel: true },
+      };
+
+      // ── Price Chart ──
+      priceChart = createChart(priceEl, {
+        ...commonLayout,
+        width: priceEl.clientWidth,
+        height: priceH,
+        rightPriceScale: {
+          ...commonLayout.rightPriceScale,
+          scaleMargins: { top: 0.1, bottom: 0.2 },
+        },
+        timeScale: { ...commonLayout.timeScale, visible: false },
+      });
+      priceChartRef.current = priceChart;
+
+      const candleData = rCandles.map((c) => ({
+        time: toDateStr(c.time),
+        open: c.open, high: c.high, low: c.low, close: c.close,
+      }));
+
+      const candleSeries = priceChart.addSeries(CandlestickSeries, {
+        upColor: "#ef4444", downColor: "#3b82f6",
+        borderUpColor: "#ef4444", borderDownColor: "#3b82f6",
+        wickUpColor: "#ef4444", wickDownColor: "#3b82f6",
+        priceFormat: { type: "custom", formatter: fmtPrice, minMove: 1 },
+        lastValueVisible: true,
+        priceLineVisible: true,
+        priceLineWidth: 1 as const,
+        priceLineStyle: 2 as const,
+        priceLineColor: rCandles.length > 0 && rCandles[rCandles.length - 1].close >= rCandles[rCandles.length - 1].open
+          ? "rgba(239,68,68,0.5)"
+          : "rgba(59,130,246,0.5)",
+      });
+      candleSeries.setData(candleData);
+
+      const volumeSeries = priceChart.addSeries(HistogramSeries, {
+        priceFormat: { type: "volume" }, priceScaleId: "volume",
+      });
+      priceChart.priceScale("volume").applyOptions({
+        scaleMargins: { top: 0.85, bottom: 0 },
+        visible: false,
+      });
+      volumeSeries.setData(
+        rCandles.map((c) => ({
+          time: toDateStr(c.time),
+          value: c.volume,
+          color: c.close >= c.open ? "rgba(239,68,68,0.2)" : "rgba(59,130,246,0.2)",
+        })),
+      );
+
+      // 수급 날짜 맵 (채널 마커 + 수급 차트 공용)
+      const candleDates = rCandles.map((c) => toDateStr(c.time));
+      const trendMap = new Map<string, InvestorTrendDaily>();
+      for (const d of rInvestor) {
+        trendMap.set(normalizeDateStr(d.date), d);
+      }
+
+      if (chartView === "trend") {
+        // ── 추세 채널 (선형 회귀 7선) ──
+        const reg = computeRegressionChannel(rCandles, channelMode);
+        if (reg) {
+          const isShort = channelMode === "short";
+          const rgb = isShort ? "56,189,248" : "34,211,238";
+
+          const sliceCandles = rCandles.slice(reg.offset, reg.offset + reg.sliceLen);
+          const bandAt = (mult: number) =>
+            sliceCandles.map((c, i) => ({
+              time: toDateStr(c.time),
+              value: reg.intercept + reg.slope * i + mult * reg.sigma,
+            }));
+
+          for (const mult of [2, -2]) {
+            const area = priceChart.addSeries(AreaSeries, {
+              lineColor: `rgba(${rgb},0.7)`,
+              topColor: `rgba(${rgb},0.12)`,
+              bottomColor: `rgba(${rgb},0.01)`,
+              lineWidth: 2,
+              lineStyle: 2,
+              crosshairMarkerVisible: false,
+              lastValueVisible: false,
+              priceLineVisible: false,
+            });
+            area.setData(bandAt(mult));
+          }
+
+          for (const mult of [1.3, -1.3, 0.7, -0.7]) {
+            const ref = priceChart.addSeries(LineSeries, {
+              color: `rgba(${rgb},0.30)`,
+              lineWidth: 1,
+              lineStyle: 2,
+              crosshairMarkerVisible: false,
+              lastValueVisible: false,
+              priceLineVisible: false,
+            });
+            ref.setData(bandAt(mult));
+          }
+
+          const glow = priceChart.addSeries(LineSeries, {
+            color: `rgba(${rgb},0.15)`,
+            lineWidth: 4,
+            lineStyle: 0,
+            crosshairMarkerVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+          glow.setData(bandAt(0));
+
+          const center = priceChart.addSeries(LineSeries, {
+            color: `rgba(${rgb},1)`,
+            lineWidth: 2,
+            lineStyle: 0,
+            crosshairMarkerVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+          center.setData(bandAt(0));
+
+          const markers = buildRegressionMarkers(rCandles, reg, trendMap);
+          if (markers.length) {
+            createSeriesMarkers(candleSeries, markers);
+          }
+        }
+      } else {
+        // ── 수평 매물대 ──
+        const shortLen = rCandles.length >= 60 ? 60 : Math.max(Math.floor(rCandles.length / 3), 2);
+        const hSlice = channelMode === "short" ? rCandles.slice(-shortLen) : rCandles;
+        const levels = computeHorizontalLevels(hSlice);
+        const firstTime = toDateStr(hSlice[0].time);
+        const lastTime = toDateStr(hSlice[hSlice.length - 1].time);
+        const rgb = "168,85,247"; // 퍼플 톤
+
+        // 최상단/최하단 영역 셰이딩
+        if (levels.length >= 2) {
+          for (const lvl of [levels[levels.length - 1], levels[0]]) {
+            const area = priceChart.addSeries(AreaSeries, {
+              lineColor: `rgba(${rgb},0.6)`,
+              topColor: `rgba(${rgb},0.08)`,
+              bottomColor: "transparent",
+              lineWidth: 2,
+              lineStyle: 0,
+              crosshairMarkerVisible: false,
+              lastValueVisible: false,
+              priceLineVisible: false,
+            });
+            area.setData([
+              { time: firstTime, value: lvl },
+              { time: lastTime, value: lvl },
+            ]);
+          }
+        }
+
+        // 중간 매물대 선
+        for (let i = 0; i < levels.length; i++) {
+          const isEdge = i === 0 || i === levels.length - 1;
+          const line = priceChart.addSeries(LineSeries, {
+            color: isEdge ? `rgba(${rgb},0.8)` : `rgba(${rgb},0.35)`,
+            lineWidth: isEdge ? 2 : 1,
+            lineStyle: isEdge ? 0 : 2,
+            crosshairMarkerVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+          line.setData([
+            { time: firstTime, value: levels[i] },
+            { time: lastTime, value: levels[i] },
+          ]);
+        }
+      }
+
+      // ── Supply/Demand Chart ──
+      supplyChart = createChart(supplyEl, {
+        ...commonLayout,
+        width: supplyEl.clientWidth,
+        height: supplyH,
+        rightPriceScale: {
+          ...commonLayout.rightPriceScale,
+          scaleMargins: { top: 0.12, bottom: 0.12 },
+        },
+      });
+      supplyChartRef.current = supplyChart;
+
+      // 수급 데이터 시작 인덱스
+      let dataStartIdx = -1;
+      for (let i = 0; i < candleDates.length; i++) {
+        if (trendMap.has(candleDates[i])) { dataStartIdx = i; break; }
+      }
+
+      const hasTrendData = dataStartIdx >= 0;
+      const coverageDays = hasTrendData
+        ? candleDates.slice(dataStartIdx).filter((d) => trendMap.has(d)).length
+        : 0;
+      const isPartial = hasTrendData && coverageDays < candleDates.length * 0.8;
+
+      // 앵커 시리즈 (시간축 동기화용)
+      const anchorSeries = supplyChart.addSeries(LineSeries, {
+        color: "transparent", lineWidth: 1 as const,
+        crosshairMarkerVisible: false,
+        lastValueVisible: false, priceLineVisible: false,
+      });
+      anchorSeries.setData(candleDates.map((t) => ({ time: t, value: 0 })));
+
+      if (hasTrendData) {
+        let cumForeign = 0, cumInst = 0, cumIndiv = 0;
+        const foreignArr: { time: string; value: number }[] = [];
+        const instArr: { time: string; value: number }[] = [];
+        const indivArr: { time: string; value: number }[] = [];
+        const zeroArr: { time: string; value: number }[] = [];
+
+        for (let i = dataStartIdx; i < candleDates.length; i++) {
+          const date = candleDates[i];
+          const entry = trendMap.get(date);
+          if (entry) {
+            cumForeign += entry.foreign;
+            cumInst += entry.institution;
+            cumIndiv += entry.individual;
+          }
+          foreignArr.push({ time: date, value: cumForeign });
+          instArr.push({ time: date, value: cumInst });
+          indivArr.push({ time: date, value: cumIndiv });
+          zeroArr.push({ time: date, value: 0 });
+        }
+
+        const supplyLines = [
+          { data: foreignArr, color: "#ef4444", label: "외국인" },
+          { data: instArr, color: "#3b82f6", label: "기관" },
+          { data: indivArr, color: "#22c55e", label: "개인" },
+        ];
+        for (const line of supplyLines) {
+          const series = supplyChart.addSeries(LineSeries, {
+            color: line.color, lineWidth: 2,
+            crosshairMarkerVisible: true, crosshairMarkerRadius: 3,
+            lastValueVisible: false, priceLineVisible: false,
+          });
+          series.setData(line.data);
+        }
+
+        const zeroLine = supplyChart.addSeries(LineSeries, {
+          color: "rgba(255,255,255,0.15)", lineWidth: 1, lineStyle: 2,
+          crosshairMarkerVisible: false, lastValueVisible: false, priceLineVisible: false,
+        });
+        zeroLine.setData(zeroArr);
+      }
+
+      // ── 시간축 동기화 ──
+      const syncRange = (
+        source: ReturnType<typeof createChart>,
+        target: ReturnType<typeof createChart>,
+      ) => {
+        source.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+          if (isSyncingRef.current || !range) return;
+          isSyncingRef.current = true;
+          target.timeScale().setVisibleLogicalRange(range);
+          isSyncingRef.current = false;
+        });
+      };
+      syncRange(priceChart, supplyChart);
+      syncRange(supplyChart, priceChart);
+
+      // ── 십자선(Crosshair) 동기화 ──
+      let crosshairSyncing = false;
+
+      const pc = priceChart;
+      const sc = supplyChart;
+
+      pc.subscribeCrosshairMove((param) => {
+        if (crosshairSyncing) return;
+        crosshairSyncing = true;
+        if (param.time) {
+          sc.setCrosshairPosition(NaN, param.time, anchorSeries);
+        } else {
+          sc.clearCrosshairPosition();
+        }
+        crosshairSyncing = false;
+      });
+
+      sc.subscribeCrosshairMove((param) => {
+        if (crosshairSyncing) return;
+        crosshairSyncing = true;
+        if (param.time) {
+          pc.setCrosshairPosition(NaN, param.time, candleSeries);
+        } else {
+          pc.clearCrosshairPosition();
+        }
+        crosshairSyncing = false;
+      });
+
+      // 수급 라벨 설정
+      if (hasTrendData && isPartial && dataStartIdx > 0) {
+        setSupplyLabel(`수급: 최근 ${coverageDays}일 분석`);
+      } else if (hasTrendData) {
+        setSupplyLabel(`수급: ${coverageDays}일 분석`);
+      } else {
+        setSupplyLabel(null);
+      }
+
+      // ── 초기 화면: 최근 N캔들만 표시 ──
+      // 일봉=40, 주봉=26(6개월), 월봉=12(1년)
+      totalBarsRef.current = candleDates.length;
+      const initBars = candleInterval === "month" ? 12 : candleInterval === "week" ? 26 : 40;
+      const initFrom = Math.max(0, candleDates.length - initBars);
+      const initTo = candleDates.length - 1 + 2;
+      priceChart.timeScale().setVisibleLogicalRange({ from: initFrom, to: initTo });
+      supplyChart.timeScale().setVisibleLogicalRange({ from: initFrom, to: initTo });
+
+      // ── 최신 버튼: 스크롤 위치 감지 ──
+      const totalLen = candleDates.length;
+      priceChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        if (!range) return;
+        const isAtLatest = range.to >= totalLen - 3;
+        setShowLatestBtn(!isAtLatest);
+      });
+
+      // ── 리사이즈 ──
+      ro = new ResizeObserver(() => {
+        if (!priceEl || !supplyEl) return;
+        const w = priceEl.clientWidth;
+        const pH = getChartHeight(0.7);
+        const sH = getChartHeight(0.3);
+        priceChartRef.current?.applyOptions({ width: w, height: pH });
+        supplyChartRef.current?.applyOptions({ width: w, height: sH });
+      });
+      ro.observe(priceEl);
+    })();
+
+    return () => {
+      ro?.disconnect();
+      priceChartRef.current?.remove();
+      priceChartRef.current = null;
+      supplyChartRef.current?.remove();
+      supplyChartRef.current = null;
+    };
+  }, [candles, investorDaily, getChartHeight, channelMode, chartView, candleInterval]);
+
+  return (
+    <div className="w-full rounded-none sm:rounded-xl border-y sm:border border-white/10 bg-[#0d0d1a] overflow-hidden" style={{ letterSpacing: "-0.05em" }}>
+      {/* Price 헤더 */}
+      <div className="px-2 sm:px-4 pt-2 sm:pt-3 pb-1 space-y-1">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] sm:text-xs font-medium text-gray-400 tracking-wide">Price</span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { setShowGuide(true); setShowTip(false); }}
+                className="flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center rounded-full border border-amber-400/50 bg-amber-400/10 text-[9px] sm:text-[10px] font-bold text-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.3)] hover:bg-amber-400/20 transition-all"
+                aria-label="전략 가이드"
+              >
+                i
+              </button>
+              {showTip && (
+                <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-amber-400/15 border border-amber-400/30 px-2 py-0.5 text-[10px] text-amber-300 animate-pulse">
+                  Strategy Guide
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3 text-[9px] sm:text-[10px] text-gray-500">
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500" />
+              상승
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-500" />
+              하락
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <div className="flex gap-1 border-r border-white/10 pr-2">
+            <button
+              type="button"
+              onClick={() => setChartView("trend")}
+              className={`rounded-md min-h-[34px] px-2.5 sm:px-3 text-[11px] sm:text-xs font-medium transition-colors ${
+                chartView === "trend"
+                  ? "bg-cyan-500/20 text-cyan-400"
+                  : "text-gray-600 hover:text-gray-400"
+              }`}
+            >
+              추세
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartView("horizontal")}
+              className={`rounded-md min-h-[34px] px-2.5 sm:px-3 text-[11px] sm:text-xs font-medium transition-colors ${
+                chartView === "horizontal"
+                  ? "bg-purple-500/20 text-purple-400"
+                  : "text-gray-600 hover:text-gray-400"
+              }`}
+            >
+              매물대
+            </button>
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => setChannelMode("long")}
+              className={`rounded-md min-h-[34px] px-2.5 sm:px-3 text-[11px] sm:text-xs font-medium transition-colors ${
+                channelMode === "long"
+                  ? "bg-amber-500/20 text-amber-400"
+                  : "text-gray-600 hover:text-gray-400"
+              }`}
+            >
+              장기
+            </button>
+            <button
+              type="button"
+              onClick={() => setChannelMode("short")}
+              className={`rounded-md min-h-[34px] px-2.5 sm:px-3 text-[11px] sm:text-xs font-medium transition-colors ${
+                channelMode === "short"
+                  ? "bg-amber-500/20 text-amber-400"
+                  : "text-gray-600 hover:text-gray-400"
+              }`}
+            >
+              단기
+            </button>
+          </div>
+          <div className="flex gap-0.5 border-l border-white/10 pl-2">
+            {([["day", "일"], ["week", "주"], ["month", "월"]] as const).map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setCandleInterval(val)}
+                className={`rounded-md min-h-[34px] min-w-[32px] px-2 text-[11px] sm:text-xs font-medium transition-colors ${
+                  candleInterval === val
+                    ? "bg-white/10 text-white"
+                    : "text-gray-600 hover:text-gray-400"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-0.5 border-l border-white/10 pl-2">
+            {VIEWPORT_OPTIONS.map((vp) => (
+              <button
+                key={vp.value}
+                type="button"
+                onClick={() => handleViewport(vp.value)}
+                className={`rounded-md min-h-[34px] px-2.5 text-[11px] sm:text-xs font-medium transition-colors ${
+                  viewportPeriod === vp.value
+                    ? "bg-indigo-500/20 text-indigo-400"
+                    : "text-gray-600 hover:text-gray-400"
+                }`}
+              >
+                {vp.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="relative">
+        <div ref={priceContainerRef} className="w-full" style={{ letterSpacing: "normal" }} />
+        {showLatestBtn && (
+          <button
+            type="button"
+            onClick={() => handleViewport("2M")}
+            className="absolute right-2 bottom-2 z-10 rounded-full bg-indigo-500/80 px-2.5 py-1 text-[10px] font-medium text-white shadow-lg backdrop-blur-sm transition-all hover:bg-indigo-500 active:scale-95"
+          >
+            최신 &raquo;
+          </button>
+        )}
+      </div>
+      <div className="h-px bg-white/[0.06] mx-1 sm:mx-3" />
+
+      {/* Supply/Demand 헤더 */}
+      <div className="flex flex-wrap items-center justify-between gap-y-1 px-2 sm:px-4 pt-2 pb-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] sm:text-xs font-medium text-gray-400 tracking-wide">Supply / Demand</span>
+          {supplyLabel && (
+            <span className="rounded bg-white/5 px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-[10px] text-gray-500 backdrop-blur-sm">
+              {supplyLabel}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 sm:gap-3 text-[9px] sm:text-[10px] text-gray-500">
+          <span className="flex items-center gap-1 rounded bg-white/[0.03] px-1 sm:px-1.5 py-0.5 backdrop-blur-sm">
+            <span className="inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500" />
+            외국인
+          </span>
+          <span className="flex items-center gap-1 rounded bg-white/[0.03] px-1 sm:px-1.5 py-0.5 backdrop-blur-sm">
+            <span className="inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-500" />
+            기관
+          </span>
+          <span className="flex items-center gap-1 rounded bg-white/[0.03] px-1 sm:px-1.5 py-0.5 backdrop-blur-sm">
+            <span className="inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-500" />
+            개인
+          </span>
+        </div>
+      </div>
+
+      <div ref={supplyContainerRef} className="w-full pb-1" style={{ letterSpacing: "normal" }} />
+
+      {/* ── 모바일: 트리거 버튼 + 탭 카드 (md 미만) ── */}
+      {investorDaily.length > 0 && (
+        <>
+          {/* 트리거 버튼 */}
+          <div className="md:hidden border-t border-white/[0.06] px-2 py-3">
+            <button
+              type="button"
+              onClick={() => setShowDailyDetail((v) => !v)}
+              className="w-full flex items-center justify-center gap-2 rounded-lg border border-indigo-500/20 bg-indigo-500/5 py-3 text-[12px] font-medium text-indigo-400 active:bg-indigo-500/10 transition-colors"
+            >
+              <span>{showDailyDetail ? "Daily Detail 닫기" : "Daily Detail 상세 정보"}</span>
+              <svg
+                className={`h-3.5 w-3.5 transition-transform duration-200 ${showDailyDetail ? "rotate-180" : ""}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+
+          {/* 모바일 탭 + 카드 */}
+          {showDailyDetail && (
+            <div className="md:hidden">
+              {/* 탭 바 */}
+              <div className="flex border-b border-white/[0.06] mx-2">
+                {([["basic", "기본 정보"], ["supply", "수급 및 보유"]] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setDailyTab(key)}
+                    className={`flex-1 py-2.5 text-[12px] font-medium text-center transition-colors ${
+                      dailyTab === key
+                        ? "text-indigo-400 border-b-2 border-indigo-400"
+                        : "text-gray-600"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* 카드 리스트 */}
+              <div className="overflow-y-auto px-2 pt-2 pb-3 space-y-1.5" style={{ maxHeight: 480 }}>
+                {[...investorDaily].reverse().slice(0, 60).map((d) => {
+                  const dateStr = normalizeDateStr(d.date);
+                  const diff = d.priceChange ?? 0;
+                  const rate = d.changeRate ?? 0;
+                  return (
+                    <div
+                      key={`${dailyTab}-${dateStr}`}
+                      className="rounded-lg border border-white/[0.06] bg-[#0f1029] px-3 py-2 font-mono tabular-nums"
+                    >
+                      {/* 공통 Header: 날짜 + 종가 + 등락률 */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-gray-500">{dateStr.slice(5)}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-semibold text-gray-200">
+                            {d.close != null ? d.close.toLocaleString() : "-"}
+                          </span>
+                          <span
+                            className={`rounded-md px-1.5 py-0.5 text-[12px] font-bold leading-tight ${
+                              rate > 0
+                                ? "bg-red-500/15 text-red-400"
+                                : rate < 0
+                                  ? "bg-blue-500/15 text-blue-400"
+                                  : "bg-white/5 text-gray-500"
+                            }`}
+                          >
+                            {rate > 0 ? "+" : ""}{rate.toFixed(2)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {dailyTab === "basic" ? (
+                        /* ── 탭1: 기본 정보 ── */
+                        <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px]">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">전일비</span>
+                            <span className={`font-medium ${diff > 0 ? "text-red-400" : diff < 0 ? "text-blue-400" : "text-gray-500"}`}>
+                              {diff > 0 ? "▲" : diff < 0 ? "▼" : ""}{Math.abs(diff).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">거래량</span>
+                            <span className="font-bold text-gray-200">{d.volume != null ? d.volume.toLocaleString() + " 주" : "-"}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        /* ── 탭2: 수급 및 보유 ── */
+                        <>
+                          {/* 수급 3열 — 배지 스타일 */}
+                          <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+                            <div className={`rounded-md py-1.5 ${d.individual > 0 ? "bg-red-500/10" : d.individual < 0 ? "bg-blue-500/10" : "bg-white/[0.03]"}`}>
+                              <div className="text-[9px] text-gray-500 mb-0.5">개인</div>
+                              <div className={`text-[12px] font-bold ${d.individual > 0 ? "text-red-300" : d.individual < 0 ? "text-blue-300" : "text-gray-600"}`}>
+                                {d.individual > 0 ? "+" : ""}{d.individual.toLocaleString()}
+                              </div>
+                            </div>
+                            <div className={`rounded-md py-1.5 ${d.foreign > 0 ? "bg-red-500/10" : d.foreign < 0 ? "bg-blue-500/10" : "bg-white/[0.03]"}`}>
+                              <div className="text-[9px] text-gray-500 mb-0.5">외국인</div>
+                              <div className={`text-[12px] font-bold ${d.foreign > 0 ? "text-red-300" : d.foreign < 0 ? "text-blue-300" : "text-gray-600"}`}>
+                                {d.foreign > 0 ? "+" : ""}{d.foreign.toLocaleString()}
+                              </div>
+                            </div>
+                            <div className={`rounded-md py-1.5 ${d.institution > 0 ? "bg-red-500/10" : d.institution < 0 ? "bg-blue-500/10" : "bg-white/[0.03]"}`}>
+                              <div className="text-[9px] text-gray-500 mb-0.5">기관</div>
+                              <div className={`text-[12px] font-bold ${d.institution > 0 ? "text-red-300" : d.institution < 0 ? "text-blue-300" : "text-gray-600"}`}>
+                                {d.institution > 0 ? "+" : ""}{d.institution.toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+                          {/* 보유 정보 */}
+                          <div className="mt-2 pt-2 border-t border-white/[0.04] grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px]">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">외인보유</span>
+                              <span className="text-gray-300">{d.foreignTotal != null ? d.foreignTotal.toLocaleString() : "-"}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">보유율</span>
+                              <span className="text-gray-300">{d.foreignPct != null ? `${d.foreignPct.toFixed(2)}%` : "-"}</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── PC 테이블 (md 이상) ── */}
+          <div className="hidden md:block border-t border-white/[0.06]">
+            <div className="px-4 pt-3 pb-1">
+              <span className="text-xs font-medium text-gray-400 tracking-wide">Daily Detail</span>
+            </div>
+            <div className="overflow-x-auto overflow-y-auto pb-2" style={{ maxHeight: 400 }}>
+              <table className="min-w-[640px] w-full text-[11px] font-mono tabular-nums border-collapse whitespace-nowrap">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-[#111125] text-gray-400 border-b-2 border-white/[0.08]">
+                    <th className="py-2 px-2 text-center font-semibold">날짜</th>
+                    <th className="py-2 px-2 text-right font-semibold">종가</th>
+                    <th className="py-2 px-2 text-right font-semibold">전일비</th>
+                    <th className="py-2 px-2 text-right font-semibold">등락률</th>
+                    <th className="py-2 px-2 text-right font-semibold">거래량</th>
+                    <th className="py-2 px-2 text-right font-semibold text-green-500/80">개인</th>
+                    <th className="py-2 px-2 text-right font-semibold text-red-500/80">외국인</th>
+                    <th className="py-2 px-2 text-right font-semibold text-blue-500/80">기관</th>
+                    <th className="py-2 px-2 text-right font-semibold">외인보유</th>
+                    <th className="py-2 px-2 text-right font-semibold">보유율</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...investorDaily].reverse().slice(0, 90).map((d, i) => {
+                    const dateStr = normalizeDateStr(d.date);
+                    const diff = d.priceChange ?? 0;
+                    const rate = d.changeRate ?? 0;
+                    const diffColor = diff > 0 ? "text-red-400" : diff < 0 ? "text-blue-400" : "text-gray-500";
+                    const isEven = i % 2 === 0;
+                    return (
+                      <tr
+                        key={dateStr}
+                        className={`border-b border-white/[0.03] transition-colors duration-150 hover:bg-white/[0.06] ${
+                          isEven ? "bg-white/[0.02]" : "bg-transparent"
+                        }`}
+                      >
+                        <td className="py-1.5 px-2 text-center text-gray-500">{dateStr.slice(5)}</td>
+                        <td className="py-1.5 px-2 text-right text-gray-300">{d.close != null ? d.close.toLocaleString() : "-"}</td>
+                        <td className={`py-1.5 px-2 text-right ${diffColor}`}>
+                          {diff > 0 ? "▲" : diff < 0 ? "▼" : ""}{Math.abs(diff).toLocaleString()}
+                        </td>
+                        <td className="py-1.5 px-2 text-right">
+                          <span
+                            className={`inline-block rounded-full px-1.5 py-0.5 leading-tight ${
+                              rate > 0
+                                ? "bg-red-500/10 text-red-400"
+                                : rate < 0
+                                  ? "bg-blue-500/10 text-blue-400"
+                                  : "text-gray-500"
+                            }`}
+                          >
+                            {rate > 0 ? "+" : ""}{rate.toFixed(2)}%
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-2 text-right text-gray-400">{d.volume != null ? d.volume.toLocaleString() : "-"}</td>
+                        <td className={`py-1.5 px-2 text-right ${d.individual > 0 ? "text-green-400" : d.individual < 0 ? "text-green-600" : "text-gray-600"}`}>
+                          {d.individual.toLocaleString()}
+                        </td>
+                        <td className={`py-1.5 px-2 text-right ${d.foreign > 0 ? "text-red-400" : d.foreign < 0 ? "text-red-700" : "text-gray-600"}`}>
+                          {d.foreign.toLocaleString()}
+                        </td>
+                        <td className={`py-1.5 px-2 text-right ${d.institution > 0 ? "text-blue-400" : d.institution < 0 ? "text-blue-700" : "text-gray-600"}`}>
+                          {d.institution.toLocaleString()}
+                        </td>
+                        <td className="py-1.5 px-2 text-right text-gray-400">
+                          {d.foreignTotal != null ? d.foreignTotal.toLocaleString() : "-"}
+                        </td>
+                        <td className="py-1.5 px-2 text-right text-gray-400">
+                          {d.foreignPct != null ? `${d.foreignPct.toFixed(2)}%` : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 전략 가이드 팝업 */}
+      {showGuide && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+          onClick={() => setShowGuide(false)}
+        >
+          <div
+            className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#0d0d1a] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setShowGuide(false)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors text-lg leading-none"
+            >
+              &times;
+            </button>
+
+            <h3 className="text-sm font-semibold text-white mb-4">SimplyStock 매매 전략 가이드</h3>
+
+            <div className="space-y-4 text-xs text-gray-400 leading-relaxed">
+              <div>
+                <h4 className="text-cyan-400 font-medium mb-1">주가의 길 (The Price Path)</h4>
+                <p>
+                  주가가 노는 안전지대를 7개의 선으로 표시합니다.
+                  맨 아래 선에 닿으면 &lsquo;저평가(세일)&rsquo;,
+                  맨 위 선에 닿으면 &lsquo;과열(비쌈)&rsquo; 상태입니다.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-cyan-400 font-medium mb-1">진짜 기회 찾기</h4>
+                <p>
+                  단순히 선에 닿았다고 사는 게 아닙니다.
+                  외국인/기관(큰손)이 함께 사는지 확인합니다.
+                  큰손이 함께 움직일 때만 강조 마커가 뜨는 진짜 타점입니다.
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 rounded-sm bg-green-400 shrink-0" />
+                    <span>하단 터치 + 큰손 매수 = 고확률 반등 타점</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 rounded-sm bg-red-400 shrink-0" />
+                    <span>상단 터치 + 큰손 동반 매도 = 과열 경고</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-600 text-[10px] shrink-0">&uarr; &darr;</span>
+                    <span>큰손 미동반 단순 터치 (참고용)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-cyan-400 font-medium mb-1">망원경 vs 돋보기</h4>
+                <p>
+                  장기 채널은 몇 년간의 큰 흐름을 망원경으로 보는 것이고,
+                  단기 채널은 최근 3개월간의 숨 가쁜 변화를 돋보기로 보는 것입니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg bg-amber-400/5 border border-amber-400/15 px-3 py-2 text-[11px] text-amber-300 text-center">
+              Golden Rule: 강조 마커는 큰손이 보증하는 타점입니다!
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-white/5 text-[10px] text-gray-600 text-center">
+              투자 판단의 참고 자료이며, 매매를 권유하지 않습니다.
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

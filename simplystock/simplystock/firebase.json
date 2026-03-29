@@ -1,0 +1,63 @@
+{
+  "hosting": {
+    "public": "out",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "functions/**"],
+    "trailingSlash": true,
+    "headers": [
+      {
+        "source": "**/*.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "source": "/sw.js",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "source": "**/*.@(js|css)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      },
+      {
+        "source": "/version.json",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      }
+    ],
+    "rewrites": [
+      { "source": "/api/analyze", "function": "analyze" },
+      { "source": "/api/kospi-futures", "function": "kospiFutures" },
+      { "source": "/api/kospi-futures-night-test", "function": "kospiFuturesNightTest" },
+      { "source": "/api/stock-chart", "function": "stockChart" },
+      { "source": "/api/stock-prices", "function": "stockPrices" },
+      { "source": "/api/investor-profile", "function": "investorProfile" },
+      { "source": "/api/stock-roast", "function": "stockRoast" },
+      { "source": "/api/chart-game", "function": "chartGame" },
+      { "source": "/api/stock-briefing", "function": "stockBriefing" },
+      { "source": "/api/stock-search", "function": "stockSearch" },
+      { "source": "/api/market", "function": "market" },
+      { "source": "/api/investor-trend", "function": "investorTrend" },
+      { "source": "/api/popular-stocks", "function": "popularStocks" },
+      { "source": "/api/investor-recommend", "function": "investorRecommend" },
+      { "source": "/api/signals", "function": "signalsScanner" },
+      { "source": "/api/signal-scan", "function": "signalScan" },
+      { "source": "/api/ss-watchlist", "function": "ssWatchlist" },
+      { "source": "/api/per-band", "function": "perBand" },
+      { "source": "/api/commodity-prices", "function": "commodityPrices" },
+      { "source": "/api/earnings-calendar", "function": "earningsCalendar" },
+      { "source": "/api/bot-init", "function": "botInit" },
+      { "source": "/api/capital-market", "function": "capitalMarket" },
+      { "source": "/api/capital-market-series", "function": "capitalMarketSeries" },
+      { "source": "/api/visitor-count", "function": "visitorCount" },
+      { "source": "/api/bs-signals", "function": "bsSignalScan" },
+      { "source": "/api/stock-report", "function": "stockReport" },
+      { "source": "/api/golden-history", "function": "goldenHistory" },
+      { "source": "/api/portfolio-share-coupon", "function": "portfolioShareCoupon" },
+      { "source": "/api/portfolio-ocr", "function": "portfolioOcr" },
+      { "source": "/api/portfolio-analyze", "function": "portfolioAnalyze" }
+    ]
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

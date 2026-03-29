@@ -1,0 +1,17 @@
+{
+  "name": "blog-automation",
+  "version": "2.0.0",
+  "private": true,
+  "description": "SimplyStock 블로그 글 자동 생성 (웹 UI + Gemini 2.5 Flash)",
+  "scripts": {
+    "start": "node server.js",
+    "generate": "node generate.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "dotenv": "^16.0.0",
+    "express": "^4.21.0",
+    "marked": "^15.0.0",
+    "puppeteer": "^24.0.0"
+  }
+}

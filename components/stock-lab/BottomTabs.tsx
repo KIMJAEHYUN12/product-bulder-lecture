@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import { SectorCompare } from "./SectorCompare";
 import { InvestorTrend } from "./InvestorTrend";
 import { NewsPanel } from "./NewsPanel";
+import { SignalScanner } from "./SignalScanner";
 import type { StockPrice } from "@/lib/stockPricesApi";
 import type { StockSearchResult } from "@/lib/stockSearchApi";
-import type { InvestorTrendData, StockNewsItem } from "@/types";
+import type { InvestorTrendData, SignalScanResponse, StockNewsItem } from "@/types";
 
-const TABS = ["비교", "수급", "뉴스"] as const;
+const TABS = ["비교", "수급", "뉴스", "신호"] as const;
 type Tab = (typeof TABS)[number];
 
 interface Props {
@@ -19,9 +21,13 @@ interface Props {
   sectorPriceMap: Record<string, StockPrice>;
   isLoadingInvestor: boolean;
   isLoadingSector: boolean;
+  signalData: SignalScanResponse | null;
+  isLoadingSignal: boolean;
   getIndustry: (symbol: string) => string;
   onLoadInvestor: (symbol: string) => void;
   onLoadSector: (symbol: string) => void;
+  onLoadSignal: () => void;
+  onSelectStock: (symbol: string, name: string) => void;
 }
 
 export function BottomTabs({
@@ -32,9 +38,13 @@ export function BottomTabs({
   sectorPriceMap,
   isLoadingInvestor,
   isLoadingSector,
+  signalData,
+  isLoadingSignal,
   getIndustry,
   onLoadInvestor,
   onLoadSector,
+  onLoadSignal,
+  onSelectStock,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("뉴스");
 
@@ -56,13 +66,20 @@ export function BottomTabs({
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-bold transition-colors whitespace-nowrap ${
+            className={`relative shrink-0 px-3 py-1.5 rounded-md text-xs font-bold transition-colors whitespace-nowrap ${
               activeTab === tab
-                ? "bg-white/15 text-white"
+                ? "text-white"
                 : "bg-white/5 text-gray-500 hover:text-gray-300"
             }`}
           >
-            {tab}
+            {activeTab === tab && (
+              <motion.div
+                layoutId="bottom-tab-indicator"
+                className="absolute inset-0 bg-white/15 rounded-md"
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              />
+            )}
+            <span className="relative z-10">{tab}</span>
           </button>
         ))}
       </div>
@@ -89,6 +106,15 @@ export function BottomTabs({
 
       {activeTab === "뉴스" && (
         <NewsPanel stocks={stocks} newsMap={newsMap} />
+      )}
+
+      {activeTab === "신호" && (
+        <SignalScanner
+          signalData={signalData}
+          isLoading={isLoadingSignal}
+          onLoad={onLoadSignal}
+          onSelectStock={onSelectStock}
+        />
       )}
     </div>
   );

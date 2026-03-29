@@ -3,3 +3,16 @@ functions/node_modules/
 .firebase/
 .next/
 out/
+
+# secrets
+.env
+.env.*
+.env.local
+
+# archives
+*.tar.gz
+
+# IDE
+.vscode/
+.idea/
+simplystock/simplystock/simplystock-release.keystore

@@ -23,6 +23,10 @@ export interface RankingEntry {
   returnPct: number;
   updatedAt: string;
   investorType?: string;   // "⚡ 공격형 트레이더" 형태
+  holdingCount?: number;       // 보유 종목 수
+  topHolding?: string;         // 대표 종목명 (평가액 최대)
+  prevReturnPct?: number;      // 전일 수익률 (변동 계산용)
+  pnlAmount?: number;          // 평가손익 금액 (원 단위)
 }
 
 export async function upsertRanking(entry: RankingEntry): Promise<void> {
@@ -43,7 +47,7 @@ export async function deleteRanking(userId: string): Promise<void> {
   await deleteDoc(doc(db, COLLECTION, userId));
 }
 
-export async function fetchTopRankings(n = 20): Promise<RankingEntry[]> {
+export async function fetchTopRankings(n = 200): Promise<RankingEntry[]> {
   const q = query(
     collection(db, COLLECTION),
     orderBy("returnPct", "desc"),

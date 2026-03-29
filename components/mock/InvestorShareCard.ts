@@ -1,6 +1,6 @@
 /**
  * Canvas-based share card generator for investor type results.
- * Generates a 400×560 PNG — no external dependencies.
+ * Generates a 400×580 PNG — no external dependencies.
  */
 import type { InvestorType, InvestorTypeKey } from "@/lib/investorQuiz";
 
@@ -8,10 +8,14 @@ const TYPE_COLORS: Record<
   InvestorTypeKey,
   { bg1: string; bg2: string; accent: string; light: string }
 > = {
-  aggressive: { bg1: "#130303", bg2: "#1f0707", accent: "#DC2626", light: "#FCA5A5" },
-  analytical: { bg1: "#030813", bg2: "#07101f", accent: "#2563EB", light: "#93C5FD" },
-  stable:     { bg1: "#031308", bg2: "#071f0f", accent: "#16A34A", light: "#86EFAC" },
-  momentum:   { bg1: "#0a0313", bg2: "#13071f", accent: "#9333EA", light: "#D8B4FE" },
+  visionary:   { bg1: "#030a13", bg2: "#071520", accent: "#06B6D4", light: "#A5F3FC" },
+  dealmaker:   { bg1: "#13100a", bg2: "#1f1a0f", accent: "#D4A853", light: "#FDE68A" },
+  sage:        { bg1: "#031308", bg2: "#071f0f", accent: "#16A34A", light: "#86EFAC" },
+  strategist:  { bg1: "#030813", bg2: "#07101f", accent: "#2563EB", light: "#93C5FD" },
+  hunter:      { bg1: "#130303", bg2: "#1f0707", accent: "#DC2626", light: "#FCA5A5" },
+  observer:    { bg1: "#130a03", bg2: "#1f1207", accent: "#EA580C", light: "#FDBA74" },
+  contrarian:  { bg1: "#0a0313", bg2: "#13071f", accent: "#9333EA", light: "#D8B4FE" },
+  explorer:    { bg1: "#13030a", bg2: "#1f0713", accent: "#EC4899", light: "#F9A8D4" },
 };
 
 /** Wrap Korean/mixed text by pixel width */
@@ -61,7 +65,7 @@ export async function generateInvestorShareImage(
 ): Promise<Blob | null> {
   try {
     const DPR = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);
-    const W = 400, H = 560;
+    const W = 400, H = 580;
     const canvas = document.createElement("canvas");
     canvas.width = W * DPR;
     canvas.height = H * DPR;
@@ -90,7 +94,7 @@ export async function generateInvestorShareImage(
     }
 
     // Center glow blob
-    const glowCenter = ctx.createRadialGradient(W / 2, H * 0.38, 0, W / 2, H * 0.38, 160);
+    const glowCenter = ctx.createRadialGradient(W / 2, H * 0.35, 0, W / 2, H * 0.35, 160);
     glowCenter.addColorStop(0, c.accent + "44");
     glowCenter.addColorStop(1, "transparent");
     ctx.fillStyle = glowCenter;
@@ -103,8 +107,8 @@ export async function generateInvestorShareImage(
     ctx.textBaseline = "middle";
     ctx.fillText("오비젼 투자성향 테스트", W / 2, 34);
 
-    // ── Circle ──────────────────────────────────────────────
-    const cx = W / 2, cy = 188, cr = 70;
+    // ── Character image ─────────────────────────────────────
+    const cx = W / 2, cy = 175, cr = 65;
 
     // Outer glow
     const outerGlow = ctx.createRadialGradient(cx, cy, cr * 0.5, cx, cy, cr * 2);
@@ -114,6 +118,30 @@ export async function generateInvestorShareImage(
     ctx.beginPath();
     ctx.arc(cx, cy, cr * 2, 0, Math.PI * 2);
     ctx.fill();
+
+    // Load and draw character image in circle
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.crossOrigin = "anonymous";
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = result.image;
+      });
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, cx - cr, cy - cr, cr * 2, cr * 2);
+      ctx.restore();
+    } catch {
+      // Fallback to emoji if image fails
+      ctx.font = `52px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "white";
+      ctx.fillText(result.emoji, cx, cy);
+    }
 
     // Circle border with glow
     ctx.save();
@@ -126,29 +154,30 @@ export async function generateInvestorShareImage(
     ctx.stroke();
     ctx.restore();
 
-    // Inner circle fill (semi-transparent)
-    ctx.fillStyle = c.accent + "1a";
-    ctx.beginPath();
-    ctx.arc(cx, cy, cr, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Emoji — use explicit emoji font for reliability
-    ctx.font = `56px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", serif`;
+    // ── Character name ─────────────────────────────────────
+    ctx.fillStyle = c.light;
+    ctx.font = `bold 14px ${KO_FONT}`;
     ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "white";
-    ctx.fillText(result.emoji, cx, cy);
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(result.character, W / 2, 272);
 
     // ── Type name ───────────────────────────────────────────
     ctx.save();
     ctx.shadowBlur = 10;
     ctx.shadowColor = c.accent + "80";
     ctx.fillStyle = "#ffffff";
-    ctx.font = `bold 26px ${KO_FONT}`;
+    ctx.font = `bold 22px ${KO_FONT}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText(result.name, W / 2, 313);
+    ctx.fillText(result.name, W / 2, 300);
     ctx.restore();
+
+    // ── Subtitle ────────────────────────────────────────────
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.font = `12px ${KO_FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(result.subtitle, W / 2, 320);
 
     // Divider
     const grad = ctx.createLinearGradient(60, 0, W - 60, 0);
@@ -158,14 +187,14 @@ export async function generateInvestorShareImage(
     ctx.strokeStyle = grad;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(60, 330); ctx.lineTo(W - 60, 330);
+    ctx.moveTo(60, 336); ctx.lineTo(W - 60, 336);
     ctx.stroke();
 
     // ── Traits (top 3) ──────────────────────────────────────
     const traits = result.traits.slice(0, 3);
     ctx.font = `12px ${KO_FONT}`;
     traits.forEach((t, i) => {
-      const ty = 356 + i * 25;
+      const ty = 362 + i * 25;
       ctx.fillStyle = c.accent;
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
@@ -204,7 +233,7 @@ export async function generateInvestorShareImage(
     ctx.fillStyle = "rgba(255,255,255,0.2)";
     ctx.font = "10px monospace";
     ctx.textAlign = "center";
-    ctx.fillText("mylen-24263782-5d205.web.app", W / 2, H - 18);
+    ctx.fillText("bitgak.co.kr", W / 2, H - 18);
 
     return new Promise<Blob | null>((resolve) => {
       canvas.toBlob((blob) => resolve(blob), "image/png");

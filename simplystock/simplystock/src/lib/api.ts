@@ -14,7 +14,7 @@ function pickInterval(range: ChartRange): "1d" | "1wk" {
 
 /** 장기 요청은 타임아웃을 넉넉히 */
 function pickTimeout(range: ChartRange): number {
-  if (range === "max") return 30000;
+  if (range === "max" || range === "10y") return 30000;
   if (range === "5y" || range === "2y") return 20000;
   return 10000;
 }
@@ -78,16 +78,110 @@ export async function fetchInvestorTrend(
   return res.json();
 }
 
-export async function searchStocks(
-  query: string,
-): Promise<StockSearchResult[]> {
-  if (!query.trim()) return [];
+const ALIAS_MAP: Record<string, string> = {
+  "타이거": "TIGER",
+  "코덱스": "KODEX",
+  "킨덱스": "KINDEX",
+  "히어로즈": "HEROES",
+  "코리아": "KOREA",
+  "에이아이": "AI",
+  "탑": "TOP",
+  "플러스": "PLUS",
+  "에스엔피": "SNP",
+  "나스닥": "NASDAQ",
+};
+
+// 해외 종목 한글→티커 매핑 (프론트에서 병렬 검색용)
+const GLOBAL_ALIAS: Record<string, string> = {
+  "엔비디아": "NVDA", "앤비디아": "NVDA", "애플": "AAPL", "테슬라": "TSLA",
+  "마이크로소프트": "MSFT", "구글": "GOOGL", "알파벳": "GOOGL",
+  "아마존": "AMZN", "메타": "META", "넷플릭스": "NFLX",
+  "인텔": "INTC", "퀄컴": "QCOM", "브로드컴": "AVGO",
+  "어도비": "ADBE", "세일즈포스": "CRM", "팔란티어": "PLTR",
+  "스노우플레이크": "SNOW", "코인베이스": "COIN",
+  "리비안": "RIVN", "루시드": "LCID", "니오": "NIO",
+  "알리바바": "BABA", "바이두": "BIDU", "텐센트": "TCEHY",
+  "핀둬둬": "PDD", "비야디": "BYDDY",
+  "소파이": "SOFI", "로블록스": "RBLX", "유니티": "U",
+  "크라우드스트라이크": "CRWD", "데이터독": "DDOG",
+  "마이크론": "MU", "램리서치": "LRCX",
+  "버크셔": "BRK-B", "워렌버핏": "BRK-B", "엑손모빌": "XOM",
+  "비자": "V", "마스터카드": "MA", "화이자": "PFE",
+  "일라이릴리": "LLY", "코스트코": "COST", "월마트": "WMT",
+  "스타벅스": "SBUX", "디즈니": "DIS", "나이키": "NKE",
+  "맥도날드": "MCD", "보잉": "BA", "슈퍼마이크로": "SMCI",
+  "암홀딩스": "ARM",
+};
+
+function applyGlobalAlias(q: string): string | null {
+  for (const [kr, en] of Object.entries(GLOBAL_ALIAS)) {
+    if (q.includes(kr)) return en;
+  }
+  return null;
+}
+
+function applyAlias(q: string): string | null {
+  let replaced = q;
+  for (const [kr, en] of Object.entries(ALIAS_MAP)) {
+    if (replaced.includes(kr)) {
+      replaced = replaced.replace(kr, en);
+    }
+  }
+  return replaced !== q ? replaced : null;
+}
+
+async function fetchSearch(q: string): Promise<StockSearchResult[]> {
   const res = await fetch(
-    `${FIREBASE_HOST}/api/stock-search?q=${encodeURIComponent(query.trim())}`,
+    `${FIREBASE_HOST}/api/stock-search?q=${encodeURIComponent(q)}`,
     { signal: AbortSignal.timeout(6000) },
   );
   if (!res.ok) return [];
   return res.json();
+}
+
+export async function searchStocks(
+  query: string,
+): Promise<StockSearchResult[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  const aliased = applyAlias(q);
+  const globalAliased = applyGlobalAlias(q);
+
+  // 병렬 검색: 원본 + ETF 별칭 + 해외종목 티커
+  const fetches: Promise<StockSearchResult[]>[] = [fetchSearch(q)];
+  if (aliased) fetches.push(fetchSearch(aliased));
+  if (globalAliased) fetches.push(fetchSearch(globalAliased));
+
+  if (fetches.length === 1) return fetches[0];
+
+  const results = await Promise.all(fetches);
+
+  // 해외종목 티커 결과를 맨 앞에 배치 (사용자가 원하는 결과 우선)
+  const merged: StockSearchResult[] = [];
+  const seen = new Set<string>();
+
+  // globalAliased 결과 먼저 (해외 원본 종목)
+  if (globalAliased && results.length >= (aliased ? 3 : 2)) {
+    const globalResults = results[results.length - 1];
+    for (const r of globalResults) {
+      if (!seen.has(r.symbol)) { seen.add(r.symbol); merged.push(r); }
+    }
+  }
+
+  // 원본 검색 결과 (한국 ETF 등)
+  for (const r of results[0]) {
+    if (!seen.has(r.symbol)) { seen.add(r.symbol); merged.push(r); }
+  }
+
+  // ETF 별칭 결과
+  if (aliased && results[1]) {
+    for (const r of results[1]) {
+      if (!seen.has(r.symbol)) { seen.add(r.symbol); merged.push(r); }
+    }
+  }
+
+  return merged;
 }
 
 export interface SignalEntry {
@@ -249,7 +343,15 @@ export async function fetchEarnings(): Promise<EarningsCalendarResponse> {
 export interface WatchlistItem {
   symbol: string;
   name: string;
+  customName?: string;
   addedAt: string;
+  folderId?: string;
+}
+
+export interface WatchlistFolder {
+  id: string;
+  name: string;
+  order: number;
 }
 
 export function getDeviceId(): string {
@@ -267,8 +369,10 @@ export function setWatchlistUserId(uid: string | null) {
   _userId = uid;
 }
 
-async function watchlistCall(body: Record<string, string>): Promise<WatchlistItem[]> {
-  const payload: Record<string, string> = { ...body };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function watchlistCallRaw(body: Record<string, any>): Promise<{ items: WatchlistItem[]; folders?: WatchlistFolder[] }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const payload: Record<string, any> = { ...body };
   if (_userId) payload.userId = _userId;
   else payload.deviceId = getDeviceId();
   const res = await fetch(`${FIREBASE_HOST}/api/ss-watchlist`, {
@@ -280,18 +384,23 @@ async function watchlistCall(body: Record<string, string>): Promise<WatchlistIte
   const data = await res.json();
   if (!res.ok) {
     if (data.error === "MAX_REACHED") {
-      const err: Error & { code?: string; items?: WatchlistItem[] } = new Error(`관심종목은 최대 ${data.limit ?? 30}개까지 추가할 수 있습니다`);
+      const err: Error & { code?: string; items?: WatchlistItem[] } = new Error(`관심종목은 최대 ${data.limit ?? 50}개까지 추가할 수 있습니다`);
       err.code = "MAX_REACHED";
       err.items = data.items ?? [];
       throw err;
     }
     throw new Error("watchlist API error");
   }
-  return data.items ?? [];
+  return { items: data.items ?? [], folders: data.folders };
 }
 
-export async function fetchWatchlist(): Promise<WatchlistItem[]> {
-  return watchlistCall({ action: "list" });
+async function watchlistCall(body: Record<string, string>): Promise<WatchlistItem[]> {
+  const result = await watchlistCallRaw(body);
+  return result.items;
+}
+
+export async function fetchWatchlist(): Promise<{ items: WatchlistItem[]; folders: WatchlistFolder[] }> {
+  return watchlistCallRaw({ action: "list" }) as Promise<{ items: WatchlistItem[]; folders: WatchlistFolder[] }>;
 }
 
 export async function addToWatchlist(symbol: string, name: string): Promise<WatchlistItem[]> {
@@ -300,6 +409,23 @@ export async function addToWatchlist(symbol: string, name: string): Promise<Watc
 
 export async function removeFromWatchlist(symbol: string): Promise<WatchlistItem[]> {
   return watchlistCall({ action: "remove", symbol });
+}
+
+export async function renameWatchlistItem(symbol: string, customName: string): Promise<WatchlistItem[]> {
+  return watchlistCall({ action: "rename", symbol, customName });
+}
+
+export async function reorderWatchlist(symbols: string[]): Promise<WatchlistItem[]> {
+  return (await watchlistCallRaw({ action: "reorder", symbols })).items;
+}
+
+export async function setWatchlistFolder(symbol: string, folderId: string | null): Promise<WatchlistItem[]> {
+  return (await watchlistCallRaw({ action: "set-folder", symbol, folderId: folderId || "" })).items;
+}
+
+export async function manageWatchlistFolders(folders: WatchlistFolder[]): Promise<{ items: WatchlistItem[]; folders: WatchlistFolder[] }> {
+  const result = await watchlistCallRaw({ action: "manage-folders", folders });
+  return { items: result.items, folders: result.folders ?? [] };
 }
 
 export async function migrateWatchlist(userId: string): Promise<WatchlistItem[]> {

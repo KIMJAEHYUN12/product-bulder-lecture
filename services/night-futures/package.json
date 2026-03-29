@@ -1,0 +1,15 @@
+{
+  "name": "night-futures",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KOSPI200 야간선물 실시간 시세 수집 (KIS WebSocket → Firestore)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "express": "^4.18.2",
+    "firebase-admin": "^12.0.0"
+  }
+}

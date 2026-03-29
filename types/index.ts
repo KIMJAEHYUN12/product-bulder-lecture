@@ -76,11 +76,14 @@ export interface StockChartResponse {
   candles: Candle[];
 }
 
+export type BitgakViewMode = "auto" | "bullish" | "bearish";
+
 export interface BitgakLine {
-  type: "channel_top" | "channel_bottom" | "midline" | "support_resistance";
+  type: "channel_top" | "channel_bottom" | "midline" | "support_resistance" | "trend_line";
   label: string;
   style: "solid" | "dashed";
   color: string;
+  opacity?: number;
   /** Array of {time, value} for lightweight-charts LineSeries */
   points: { time: number; value: number }[];
 }
@@ -110,15 +113,26 @@ export interface AnalysisHistoryItem {
   rsi: number;
 }
 
+export interface BitgakMeta {
+  channelDirection: "상승" | "하락" | "횡보" | "판별불가";
+  channelPosition: string | null;
+  positionPercent: number | null;
+  threeThree: { highsMet: boolean; highsCount: number; lowsMet: boolean; lowsCount: number };
+  srFlips: string[];
+  priceRange: { high: number; low: number; current: number; changePct: number };
+  period: { start: string; end: string; candleCount: number };
+}
+
 export interface BitgakResult {
   highs: BitgakPivot[];
   lows: BitgakPivot[];
   lines: BitgakLine[];
   summary: string; // 데이터 요약 (Gemini에 넘길 텍스트)
   indicators?: TechIndicators;
+  meta?: BitgakMeta;
 }
 
-export type ChartRange = "1mo" | "3mo" | "6mo" | "1y";
+export type ChartRange = "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y";
 
 // ── 차트 업다운 게임 ──
 export type GamePhase = "intro" | "loading" | "guessing" | "revealing" | "result" | "gameover";
@@ -149,7 +163,53 @@ export interface ChartGameRankingEntry {
   totalCorrect: number;
   updatedAt: string;
 }
-export type ChartInterval = "1d" | "1wk";
+export type ChartInterval = "1d" | "1wk" | "1mo";
+
+// ── AI 추천 종목 ──
+export interface RecommendedStock {
+  symbol: string;
+  name: string;
+  reason: string;
+}
+
+// ── 백테스트 ──
+export interface BacktestStock {
+  symbol: string;
+  name: string;
+}
+
+export interface BacktestResult {
+  dailyValues: { date: string; value: number }[];
+  kospiValues: { date: string; value: number }[];
+  stockValues: Record<string, { date: string; value: number }[]>;
+  totalReturnPct: number;
+  maxDrawdownPct: number;
+  cagrPct: number;
+  kospiReturnPct: number;
+  stockReturns: Record<string, number>;
+  finalAmount: number;
+}
+
+// ── 수급 신호 스캐너 ──
+export interface SignalStock {
+  symbol: string;
+  name: string;
+  price: number;
+  changePct: number;
+  crossType: "5_20" | "20_60";
+  crossDate: string;
+  daysAfterCross: number;
+  foreignNet: number;
+  institutionNet: number;
+  individualNet: number;
+  foreignPct: number;
+}
+
+export interface SignalScanResponse {
+  scannedAt: string;
+  totalScanned: number;
+  results: SignalStock[];
+}
 
 // ── 종목 분석실 ──
 export interface StockBriefingResponse {
@@ -192,4 +252,87 @@ export interface RoastState {
   error: string | null;
   grade: Grade;
   kimExpression: KimExpression;
+}
+
+// ── 투자 RPG ──
+export type RpgClassKey = "visionary" | "dealmaker" | "sage" | "strategist" | "hunter" | "observer" | "contrarian" | "explorer";
+export type EquipmentGrade = "common" | "uncommon" | "rare" | "epic" | "legendary";
+export type EquipmentSlotKey = "weapon" | "armor" | "spellbook" | "accessory";
+
+export interface RpgStats {
+  attack: number;
+  defense: number;
+  intelligence: number;
+  stamina: number;
+  luck: number;
+}
+
+export interface EquipmentItem {
+  id: string;
+  name: string;
+  emoji: string;
+  grade: EquipmentGrade;
+  baseBonus: Partial<RpgStats>;
+  bonus: Partial<RpgStats>;
+  enhanceLevel: number;
+}
+
+export interface BattleRecord {
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
+export interface BattleOpponent {
+  class: RpgClassKey;
+  className: string;
+  emoji: string;
+  nickname: string;
+  level: number;
+  stats: RpgStats;
+  combatPower: number;
+}
+
+export type TurnType = "attack" | "intelligence" | "stamina" | "luck" | "final";
+
+export interface TurnResult {
+  turn: number;
+  type: TurnType;
+  label: string;
+  playerDmg: number;
+  opponentDmg: number;
+  playerHp: number;
+  opponentHp: number;
+  isCritical: boolean;
+  flavorText: string;
+}
+
+export interface BattleResult {
+  turns: TurnResult[];
+  winner: "player" | "opponent" | "draw";
+  expReward: number;
+  stoneReward: number;
+}
+
+export interface BattleHistoryEntry {
+  date: string;
+  winner: "player" | "opponent" | "draw";
+  opponentClassName: string;
+  opponentLevel: number;
+  expReward: number;
+  stoneReward: number;
+}
+
+export interface RpgCharacter {
+  class: RpgClassKey;
+  nickname: string;
+  level: number;
+  exp: number;
+  stats: RpgStats;
+  equipment: Record<EquipmentSlotKey, EquipmentItem | null>;
+  stones: number;
+  battleRecord: BattleRecord;
+  achievements: string[];
+  createdAt: string;
+  updatedAt: string;
 }

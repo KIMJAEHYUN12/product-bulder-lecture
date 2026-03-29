@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { Skeleton } from "@/components/Skeleton";
 import {
   BarChart,
   Bar,
@@ -82,7 +83,7 @@ export function InvestorTrend({ stocks, investorMap, isLoading, onLoad }: Props)
             <button
               key={s.symbol}
               onClick={() => setActiveTab(i)}
-              className={`shrink-0 px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors whitespace-nowrap ${
+              className={`shrink-0 px-2.5 py-1 rounded-md text-xs font-bold transition-colors whitespace-nowrap ${
                 activeTab === i
                   ? "text-white"
                   : "bg-white/5 text-gray-500 hover:text-gray-300"
@@ -171,8 +172,11 @@ export function InvestorTrend({ stocks, investorMap, isLoading, onLoad }: Props)
       )}
 
       {isLoading && !data && (
-        <div className="text-xs text-gray-500 font-mono text-center py-4 animate-pulse">
-          투자자 데이터 로딩 중...
+        <div className="space-y-2 py-4">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-3/4" />
         </div>
       )}
     </div>

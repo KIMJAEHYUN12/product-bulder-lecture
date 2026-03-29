@@ -79,6 +79,12 @@ export function StockSearchBar({ stocks, onAdd, onRemove }: Props) {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && suggestions.length > 0) {
+                e.preventDefault();
+                selectStock(suggestions[0]);
+              }
+            }}
             placeholder={stocks.length === 0 ? "종목명 검색 (최대 3개)" : "종목 추가..."}
             className="flex-1 min-w-[100px] bg-transparent text-sm font-mono text-white placeholder:text-gray-500 focus:outline-none"
           />

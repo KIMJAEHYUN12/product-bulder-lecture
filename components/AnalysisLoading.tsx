@@ -76,7 +76,7 @@ export function AnalysisLoading({ isLoading, mode = "kim" }: Props) {
           <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
           <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
           <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
-          <span className="ml-2 text-[11px] text-gray-500 dark:text-gray-400 font-mono">
+          <span className="ml-2 text-xs text-gray-500 dark:text-zinc-400 font-mono">
             {mode === "kim" ? "ovision_analysis.sh" : "mcr_strategy.sh"}
           </span>
         </div>
@@ -104,7 +104,7 @@ export function AnalysisLoading({ isLoading, mode = "kim" }: Props) {
                 <span
                   className={
                     isDone
-                      ? "text-gray-400 dark:text-gray-500"
+                      ? "text-gray-400 dark:text-zinc-500"
                       : "text-gray-900 dark:text-gray-100"
                   }
                 >

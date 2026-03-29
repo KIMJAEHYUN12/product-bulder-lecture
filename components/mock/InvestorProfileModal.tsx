@@ -98,7 +98,7 @@ export function InvestorProfileModal({ portfolio, returnPct, totalAsset, onClose
 
               {/* 거래 없을 때 안내 */}
               {!hasHistory && (
-                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2 text-[11px] text-yellow-600 dark:text-yellow-400 font-mono">
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2 text-xs text-yellow-600 dark:text-yellow-400 font-mono">
                   아직 거래 내역이 없어요. MBTI만으로 투자 성향을 예측합니다.
                 </div>
               )}
@@ -140,7 +140,7 @@ export function InvestorProfileModal({ portfolio, returnPct, totalAsset, onClose
               )}
 
               {error && (
-                <div className="text-[11px] text-red-500 font-mono text-center">
+                <div className="text-xs text-red-500 font-mono text-center">
                   분석에 실패했습니다. 다시 시도해주세요.
                 </div>
               )}
@@ -168,7 +168,7 @@ export function InvestorProfileModal({ portfolio, returnPct, totalAsset, onClose
                 <div className="text-lg font-black text-gray-900 dark:text-white mb-1">
                   {result.type}
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-mono leading-relaxed px-3">
+                <p className="text-xs text-gray-500 dark:text-zinc-400 font-mono leading-relaxed px-3">
                   {result.description}
                 </p>
               </div>
@@ -178,7 +178,7 @@ export function InvestorProfileModal({ portfolio, returnPct, totalAsset, onClose
                 {result.traits.map((t, i) => (
                   <div key={i} className="flex items-start gap-2 text-xs font-mono">
                     <span className="text-kim-red shrink-0 mt-0.5">▸</span>
-                    <span className="text-gray-700 dark:text-gray-300">{t}</span>
+                    <span className="text-gray-700 dark:text-zinc-300">{t}</span>
                   </div>
                 ))}
               </div>
@@ -189,7 +189,7 @@ export function InvestorProfileModal({ portfolio, returnPct, totalAsset, onClose
                   <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono mb-1">
                     💪 강점
                   </div>
-                  <div className="text-xs text-gray-700 dark:text-gray-300 font-mono leading-relaxed">
+                  <div className="text-xs text-gray-700 dark:text-zinc-300 font-mono leading-relaxed">
                     {result.strength}
                   </div>
                 </div>
@@ -197,7 +197,7 @@ export function InvestorProfileModal({ portfolio, returnPct, totalAsset, onClose
                   <div className="text-[10px] text-red-500 dark:text-red-400 font-mono mb-1">
                     ⚠️ 약점
                   </div>
-                  <div className="text-xs text-gray-700 dark:text-gray-300 font-mono leading-relaxed">
+                  <div className="text-xs text-gray-700 dark:text-zinc-300 font-mono leading-relaxed">
                     {result.weakness}
                   </div>
                 </div>
@@ -206,7 +206,7 @@ export function InvestorProfileModal({ portfolio, returnPct, totalAsset, onClose
               {/* 오비젼의 한마디 */}
               <div className="bg-gray-100 dark:bg-black/30 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-3">
                 <div className="text-[10px] text-gray-500 font-mono mb-1">오비젼의 한마디</div>
-                <p className="text-xs text-gray-700 dark:text-gray-300 font-mono leading-relaxed">
+                <p className="text-xs text-gray-700 dark:text-zinc-300 font-mono leading-relaxed">
                   💬 &ldquo;{result.kimComment}&rdquo;
                 </p>
               </div>

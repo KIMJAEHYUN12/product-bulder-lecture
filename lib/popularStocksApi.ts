@@ -1,4 +1,4 @@
-const FIREBASE_HOST = "https://mylen-24263782-5d205.web.app";
+const FIREBASE_HOST = "https://bitgak.co.kr";
 const API_URL = process.env.NEXT_PUBLIC_POPULAR_STOCKS_API_URL || `${FIREBASE_HOST}/api/popular-stocks`;
 
 export interface PopularStockEntry {

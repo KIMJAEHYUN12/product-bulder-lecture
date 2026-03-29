@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Skeleton } from "@/components/Skeleton";
+import { StaggerContainer } from "@/components/StaggerContainer";
 import { fetchPopularStocks, type PopularStockEntry } from "@/lib/popularStocksApi";
 
 interface Props {
@@ -19,7 +21,7 @@ export function PopularStocks({ onSelect }: Props) {
   }, []);
 
   return (
-    <div className="glass-card rounded-xl p-4">
+    <div className="glass-card rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-base">🔥</span>
         <h3 className="text-sm font-black text-gray-900 dark:text-white">인기 분석 종목</h3>
@@ -27,14 +29,15 @@ export function PopularStocks({ onSelect }: Props) {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center gap-2 text-xs text-gray-400 font-mono py-2">
-          <span className="inline-block w-3 h-3 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 rounded-full animate-spin" />
-          로딩 중...
+        <div className="space-y-1.5">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-9 w-full" />
+          ))}
         </div>
       ) : stocks.length === 0 ? (
         <p className="text-xs text-gray-400 font-mono py-2">아직 분석된 종목이 없습니다</p>
       ) : (
-        <div className="space-y-1.5">
+        <StaggerContainer className="space-y-1.5">
           {stocks.map((s, i) => (
             <button
               key={s.symbol}
@@ -54,7 +57,7 @@ export function PopularStocks({ onSelect }: Props) {
               </span>
             </button>
           ))}
-        </div>
+        </StaggerContainer>
       )}
     </div>
   );

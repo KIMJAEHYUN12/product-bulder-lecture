@@ -1,6 +1,6 @@
 import type { StockBriefingResponse } from "@/types";
 
-const FIREBASE_HOST = "https://mylen-24263782-5d205.web.app";
+const FIREBASE_HOST = "https://bitgak.co.kr";
 const API_URL = `${FIREBASE_HOST}/api/stock-briefing`;
 
 function extractBriefingFromPartial(text: string): string | null {

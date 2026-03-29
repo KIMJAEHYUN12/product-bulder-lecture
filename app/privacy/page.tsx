@@ -20,7 +20,7 @@ export default function PrivacyPage() {
           </p>
         </div>
 
-        <div className="flex flex-col gap-8 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+        <div className="flex flex-col gap-8 text-sm leading-relaxed text-gray-700 dark:text-zinc-300">
 
           <section>
             <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3">1. 개요</h2>
@@ -36,7 +36,7 @@ export default function PrivacyPage() {
               <div>
                 <p className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Google 로그인 정보</p>
                 <p>모의투자 기능 이용 시 Google OAuth를 통해 아래 정보를 수집합니다.</p>
-                <ul className="list-disc list-inside mt-1 text-gray-600 dark:text-gray-400 space-y-0.5">
+                <ul className="list-disc list-inside mt-1 text-gray-600 dark:text-zinc-400 space-y-0.5">
                   <li>이름 (Google 계정 표시 이름)</li>
                   <li>이메일 주소</li>
                   <li>Google 계정 고유 ID (UID)</li>
@@ -44,7 +44,7 @@ export default function PrivacyPage() {
               </div>
               <div>
                 <p className="font-semibold text-gray-800 dark:text-gray-200 mb-1">서비스 이용 정보</p>
-                <ul className="list-disc list-inside mt-1 text-gray-600 dark:text-gray-400 space-y-0.5">
+                <ul className="list-disc list-inside mt-1 text-gray-600 dark:text-zinc-400 space-y-0.5">
                   <li>모의투자 포트폴리오 및 거래 내역</li>
                   <li>투자 성향 퀴즈 결과</li>
                   <li>커뮤니티 게시판 작성 내용</li>
@@ -53,7 +53,7 @@ export default function PrivacyPage() {
               </div>
               <div>
                 <p className="font-semibold text-gray-800 dark:text-gray-200 mb-1">자동 수집 정보</p>
-                <ul className="list-disc list-inside mt-1 text-gray-600 dark:text-gray-400 space-y-0.5">
+                <ul className="list-disc list-inside mt-1 text-gray-600 dark:text-zinc-400 space-y-0.5">
                   <li>접속 기기 정보 및 브라우저 정보</li>
                   <li>쿠키 및 로컬 스토리지 데이터</li>
                 </ul>
@@ -63,7 +63,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3">3. 정보의 이용 목적</h2>
-            <ul className="list-disc list-inside text-gray-600 dark:text-gray-400 space-y-1">
+            <ul className="list-disc list-inside text-gray-600 dark:text-zinc-400 space-y-1">
               <li>모의투자 포트폴리오 저장 및 수익률 랭킹 운영</li>
               <li>커뮤니티 게시판 서비스 제공</li>
               <li>서비스 품질 개선 및 오류 분석</li>
@@ -120,7 +120,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3">6. 정보 보관 및 삭제</h2>
-            <ul className="list-disc list-inside text-gray-600 dark:text-gray-400 space-y-1">
+            <ul className="list-disc list-inside text-gray-600 dark:text-zinc-400 space-y-1">
               <li>로그인 정보는 브라우저 세션 종료 시 자동 로그아웃됩니다.</li>
               <li>모의투자 데이터는 Firebase Firestore에 저장되며, 계정 삭제 요청 시 삭제됩니다.</li>
               <li>데이터 삭제를 원하시면 아래 이메일로 문의해 주세요.</li>
@@ -130,7 +130,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3">7. 사용자 권리</h2>
             <p>사용자는 언제든지 아래 권리를 행사할 수 있습니다.</p>
-            <ul className="list-disc list-inside mt-2 text-gray-600 dark:text-gray-400 space-y-1">
+            <ul className="list-disc list-inside mt-2 text-gray-600 dark:text-zinc-400 space-y-1">
               <li>수집된 개인정보 열람 요청</li>
               <li>개인정보 수정 또는 삭제 요청</li>
               <li>개인정보 처리 정지 요청</li>
@@ -140,7 +140,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3">8. 문의</h2>
             <p>개인정보 관련 문의사항은 아래로 연락 주세요.</p>
-            <div className="mt-2 bg-gray-100 dark:bg-white/5 rounded-lg px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">
+            <div className="mt-2 bg-gray-100 dark:bg-white/5 rounded-lg px-4 py-3 font-mono text-xs text-gray-600 dark:text-zinc-400">
               서비스명: 오비젼 (Ovision)<br />
               운영자: 오비젼 팀<br />
               이메일: <span className="text-kim-red">contact@ovision.kr</span>

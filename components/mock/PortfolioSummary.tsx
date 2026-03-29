@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { Portfolio, Holding } from "@/hooks/useMockPortfolio";
 import { StockPrice } from "@/lib/stockPricesApi";
 
@@ -84,10 +86,10 @@ function PortfolioPieChart({
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ background: color }}
                 />
-                <span className="text-[11px] font-mono text-gray-600 dark:text-gray-400 truncate flex-1">
+                <span className="text-xs font-mono text-gray-600 dark:text-zinc-400 truncate flex-1">
                   {s.name}
                 </span>
-                <span className="text-[11px] font-mono font-bold text-gray-900 dark:text-white shrink-0">
+                <span className="text-xs font-mono font-bold text-gray-900 dark:text-white shrink-0">
                   {pct}%
                 </span>
               </div>
@@ -125,48 +127,32 @@ function HoldingRow({
   onSell: (symbol: string, holding: Holding, price: number) => void;
 }) {
   const current = price ?? holding.currentPrice;
+  const evalAmount = current * holding.qty;
   const pnl = (current - holding.avgPrice) * holding.qty;
   const pnlPct = ((current - holding.avgPrice) / holding.avgPrice) * 100;
+  const pnlColor = pnl > 0 ? "text-red-500 dark:text-red-400" : pnl < 0 ? "text-blue-500 dark:text-blue-400" : "text-gray-500";
 
   return (
-    <div className="bg-gray-50 dark:bg-white/5 rounded-lg px-3 py-2 border border-gray-200 dark:border-white/10">
+    <div className="bg-gray-50 dark:bg-white/5 rounded-lg px-3 py-2.5 border border-gray-200 dark:border-white/10">
       <div className="flex justify-between items-start">
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">{holding.name}</div>
-          <div className="text-[10px] text-gray-500 font-mono">{symbol}</div>
+          <div className="text-[10px] text-gray-500 font-mono">{holding.qty}주 · 평단 {fmt(holding.avgPrice)}</div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="text-right">
-            <div className="text-xs font-mono text-gray-900 dark:text-white">{holding.qty}주</div>
-            <div
-              className={`text-[11px] font-mono ${
-                pnlPct > 0 ? "text-red-500 dark:text-red-400" : pnlPct < 0 ? "text-blue-500 dark:text-blue-400" : "text-gray-500"
-              }`}
-            >
-              {pnlPct > 0 ? "+" : ""}
-              {pnlPct.toFixed(2)}%
-            </div>
-          </div>
-          <button
-            onClick={() => onSell(symbol, holding, current)}
-            className="text-xs font-mono px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30 hover:bg-blue-100 dark:hover:bg-blue-500/40 transition-colors whitespace-nowrap"
-          >
-            매도
-          </button>
-        </div>
-      </div>
-      <div className="flex justify-between mt-1">
-        <span className="text-[10px] text-gray-500 font-mono">
-          평단 {fmt(holding.avgPrice)}
-        </span>
-        <span
-          className={`text-[10px] font-mono ${
-            pnl > 0 ? "text-red-500 dark:text-red-400" : pnl < 0 ? "text-blue-500 dark:text-blue-400" : "text-gray-500"
-          }`}
+        <button
+          onClick={() => onSell(symbol, holding, current)}
+          className="text-xs font-mono px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30 hover:bg-blue-100 dark:hover:bg-blue-500/40 transition-colors whitespace-nowrap shrink-0 ml-2"
         >
-          {pnl > 0 ? "+" : ""}
-          {fmt(Math.round(pnl))}원
-        </span>
+          매도
+        </button>
+      </div>
+      <div className="flex justify-between items-end mt-1.5">
+        <div className="text-xs font-mono text-gray-900 dark:text-white font-bold">
+          {fmt(Math.round(evalAmount))}원
+        </div>
+        <div className={`text-xs font-mono font-bold ${pnlColor}`}>
+          {pnl > 0 ? "+" : ""}{fmt(Math.round(pnl))}원 ({pnlPct > 0 ? "+" : ""}{pnlPct.toFixed(1)}%)
+        </div>
       </div>
     </div>
   );
@@ -185,12 +171,26 @@ export function PortfolioSummary({
   const holdingEntries = Object.entries(portfolio.holdings);
   const history = [...(portfolio.history ?? [])].reverse();
 
+  const pnlAmount = Math.round(totalAsset - 10_000_000);
+  const investedAmount = Object.values(portfolio.holdings).reduce(
+    (s, h) => s + h.avgPrice * h.qty, 0
+  );
+  const evaluatedAmount = Object.entries(portfolio.holdings).reduce(
+    (s, [sym, h]) => s + (prices[sym]?.price ?? h.currentPrice) * h.qty, 0
+  );
+  const holdingPnl = Math.round(evaluatedAmount - investedAmount);
+  const pnlColor = pnlAmount > 0
+    ? "text-red-500 dark:text-red-400"
+    : pnlAmount < 0
+      ? "text-blue-500 dark:text-blue-400"
+      : "text-gray-500";
+
   return (
     <div className="flex flex-col gap-3">
-      {/* 요약 헤더 */}
+      {/* 평가손익 히어로 */}
       <div className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl p-4">
         <div className="flex justify-between items-start mb-3">
-          <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">내 포트폴리오</div>
+          <div className="text-xs text-gray-500 dark:text-zinc-400 font-mono">평가손익</div>
           <button
             onClick={onReset}
             className="text-[10px] text-gray-500 hover:text-red-500 font-mono border border-gray-200 dark:border-white/10 hover:border-red-500/30 px-2 py-0.5 rounded transition-colors"
@@ -198,21 +198,38 @@ export function PortfolioSummary({
             초기화
           </button>
         </div>
-        <div className="text-2xl font-black text-gray-900 dark:text-white font-mono mb-1">
-          {fmt(Math.round(totalAsset))}
-          <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">원</span>
+        <div className={`text-2xl font-black font-mono mb-0.5 ${pnlColor}`}>
+          <AnimatedNumber value={pnlAmount} format={(n) => `${n > 0 ? "+" : ""}${fmt(Math.round(n))}`} />
+          <span className="text-sm ml-1">원</span>
         </div>
-        <div className={`text-sm font-mono font-bold ${
-          returnPct > 0 ? "text-red-500 dark:text-red-400" : returnPct < 0 ? "text-blue-500 dark:text-blue-400" : "text-gray-500"
-        }`}>
-          {returnPct > 0 ? "+" : ""}{returnPct.toFixed(2)}%
+        <div className={`text-lg font-mono font-bold ${pnlColor}`}>
+          <AnimatedNumber value={returnPct} format={(n) => `${n > 0 ? "+" : ""}${n.toFixed(2)}%`} />
         </div>
-        <div className="flex justify-between text-[11px] font-mono text-gray-500 mt-2 pt-2 border-t border-gray-200 dark:border-white/10">
-          <span>현금 {fmt(Math.round(portfolio.cash))}원</span>
-          <span>주식 {fmt(Math.round(totalAsset - portfolio.cash))}원</span>
+
+        {/* 투자 상세 */}
+        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-white/10 grid grid-cols-2 gap-y-2 gap-x-4 text-xs font-mono">
+          <div>
+            <div className="text-gray-400">투자원금</div>
+            <div className="text-gray-900 dark:text-white font-bold">{fmt(Math.round(investedAmount))}원</div>
+          </div>
+          <div>
+            <div className="text-gray-400">평가금액</div>
+            <div className={`font-bold ${holdingPnl > 0 ? "text-red-500 dark:text-red-400" : holdingPnl < 0 ? "text-blue-500 dark:text-blue-400" : "text-gray-900 dark:text-white"}`}>
+              {fmt(Math.round(evaluatedAmount))}원
+            </div>
+          </div>
+          <div>
+            <div className="text-gray-400">총자산</div>
+            <div className="text-gray-900 dark:text-white font-bold">{fmt(Math.round(totalAsset))}원</div>
+          </div>
+          <div>
+            <div className="text-gray-400">현금</div>
+            <div className="text-gray-900 dark:text-white font-bold">{fmt(Math.round(portfolio.cash))}원</div>
+          </div>
         </div>
+
         {settling && (
-          <div className="mt-2 text-[11px] text-yellow-500 dark:text-yellow-400 font-mono animate-pulse">
+          <div className="mt-2 text-xs text-yellow-500 dark:text-yellow-400 font-mono animate-pulse">
             종가 업데이트 중...
           </div>
         )}
@@ -227,28 +244,38 @@ export function PortfolioSummary({
       <div className="flex gap-1 bg-gray-100 dark:bg-white/5 rounded-lg p-1">
         <button
           onClick={() => setTab("portfolio")}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${
-            tab === "portfolio"
-              ? "bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm"
-              : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-          }`}
+          className="relative flex-1 py-1.5 text-xs font-bold rounded-md transition-colors text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
         >
-          보유종목
+          {tab === "portfolio" && (
+            <motion.div
+              layoutId="portfolio-tab-indicator"
+              className="absolute inset-0 bg-white dark:bg-white/10 rounded-md shadow-sm"
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            />
+          )}
+          <span className={`relative z-10 ${tab === "portfolio" ? "text-gray-900 dark:text-white" : ""}`}>
+            보유종목
+          </span>
         </button>
         <button
           onClick={() => setTab("history")}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${
-            tab === "history"
-              ? "bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm"
-              : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-          }`}
+          className="relative flex-1 py-1.5 text-xs font-bold rounded-md transition-colors text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
         >
-          거래내역
-          {history.length > 0 && (
-            <span className="ml-1 text-[10px] text-gray-400 font-mono">
-              {history.length}
-            </span>
+          {tab === "history" && (
+            <motion.div
+              layoutId="portfolio-tab-indicator"
+              className="absolute inset-0 bg-white dark:bg-white/10 rounded-md shadow-sm"
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            />
           )}
+          <span className={`relative z-10 ${tab === "history" ? "text-gray-900 dark:text-white" : ""}`}>
+            거래내역
+            {history.length > 0 && (
+              <span className="ml-1 text-[10px] text-gray-400 font-mono">
+                {history.length}
+              </span>
+            )}
+          </span>
         </button>
       </div>
 
@@ -307,7 +334,7 @@ export function PortfolioSummary({
                 const sellVolume = sells.reduce((s, h) => s + h.price * h.qty, 0);
                 return (
                   <div className="px-3 py-3 bg-gray-50 dark:bg-white/[0.03] border-b border-gray-200 dark:border-white/10 flex flex-col gap-1.5">
-                    <div className="flex justify-between text-[11px] font-mono">
+                    <div className="flex justify-between text-xs font-mono">
                       <span className="text-gray-500">총 거래</span>
                       <span className="text-gray-900 dark:text-white font-bold">
                         <span className="text-red-500 dark:text-red-400">매수 {buys.length}건</span>
@@ -315,16 +342,16 @@ export function PortfolioSummary({
                         <span className="text-blue-500 dark:text-blue-400">매도 {sells.length}건</span>
                       </span>
                     </div>
-                    <div className="flex justify-between text-[11px] font-mono">
+                    <div className="flex justify-between text-xs font-mono">
                       <span className="text-gray-500">총 거래대금</span>
                       <span className="text-gray-900 dark:text-white font-bold">{fmt(Math.round(totalVolume))}원</span>
                     </div>
-                    <div className="flex justify-between text-[11px] font-mono">
+                    <div className="flex justify-between text-xs font-mono">
                       <span className="text-gray-500">매수금액</span>
                       <span className="text-red-500 dark:text-red-400">{fmt(Math.round(buyVolume))}원</span>
                     </div>
                     {sellVolume > 0 && (
-                      <div className="flex justify-between text-[11px] font-mono">
+                      <div className="flex justify-between text-xs font-mono">
                         <span className="text-gray-500">매도금액</span>
                         <span className="text-blue-500 dark:text-blue-400">{fmt(Math.round(sellVolume))}원</span>
                       </div>
@@ -345,14 +372,14 @@ export function PortfolioSummary({
               {/* 목록 */}
               <div className="flex flex-col divide-y divide-gray-100 dark:divide-white/5 max-h-[280px] overflow-y-auto">
                 {history.map((h, i) => (
-                  <div key={i} className="grid grid-cols-12 items-center px-3 py-2 text-[11px] font-mono hover:bg-gray-50 dark:hover:bg-white/5">
+                  <div key={i} className="grid grid-cols-12 items-center px-3 py-2 text-xs font-mono hover:bg-gray-50 dark:hover:bg-white/5">
                     <span className="col-span-2 text-gray-400">{h.date.slice(5)}</span>
                     <span className={`col-span-1 font-bold ${
                       h.type === "buy" ? "text-red-500 dark:text-red-400" : "text-blue-500 dark:text-blue-400"
                     }`}>
                       {h.type === "buy" ? "매수" : "매도"}
                     </span>
-                    <span className="col-span-3 text-gray-700 dark:text-gray-300 truncate">{h.name}</span>
+                    <span className="col-span-3 text-gray-700 dark:text-zinc-300 truncate">{h.name}</span>
                     <span className="col-span-2 text-right text-gray-500">{h.qty}주</span>
                     <span className="col-span-4 text-right text-gray-900 dark:text-white font-bold">
                       {fmt(Math.round(h.price * h.qty))}

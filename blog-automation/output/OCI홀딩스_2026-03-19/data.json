@@ -1,0 +1,153 @@
+{
+  "name": "OCI홀딩스",
+  "symbol": "010060.KS",
+  "stockCode": "010060",
+  "price": {
+    "name": "OCI Holdings",
+    "price": 199600,
+    "changePct": 0,
+    "currency": "KRW"
+  },
+  "financials": {
+    "corpCode": "00148896",
+    "years": [],
+    "quarterly": null,
+    "majorReports": [],
+    "disclosures": []
+  },
+  "supply": {
+    "daily": [
+      {
+        "date": "20260305",
+        "close": 131300,
+        "priceChange": 10700,
+        "changeRate": 8.87,
+        "volume": 103352,
+        "foreign": -3315,
+        "institution": -4089,
+        "individual": 7404,
+        "foreignTotal": 3816343,
+        "foreignPct": 20.44
+      },
+      {
+        "date": "20260306",
+        "close": 151500,
+        "priceChange": 20200,
+        "changeRate": 15.38,
+        "volume": 298630,
+        "foreign": -57107,
+        "institution": 63742,
+        "individual": -6635,
+        "foreignTotal": 3747370,
+        "foreignPct": 20.07
+      },
+      {
+        "date": "20260309",
+        "close": 146500,
+        "priceChange": -5000,
+        "changeRate": -3.3,
+        "volume": 169201,
+        "foreign": -37408,
+        "institution": 16099,
+        "individual": 21309,
+        "foreignTotal": 3730401,
+        "foreignPct": 19.98
+      },
+      {
+        "date": "20260310",
+        "close": 141700,
+        "priceChange": -4800,
+        "changeRate": -3.28,
+        "volume": 109217,
+        "foreign": -37077,
+        "institution": -1478,
+        "individual": 38555,
+        "foreignTotal": 3648739,
+        "foreignPct": 19.54
+      },
+      {
+        "date": "20260311",
+        "close": 146700,
+        "priceChange": 5000,
+        "changeRate": 3.53,
+        "volume": 127913,
+        "foreign": 41788,
+        "institution": 11964,
+        "individual": -53752,
+        "foreignTotal": 3715643,
+        "foreignPct": 19.9
+      },
+      {
+        "date": "20260312",
+        "close": 165800,
+        "priceChange": 19100,
+        "changeRate": 13.02,
+        "volume": 635702,
+        "foreign": 1063,
+        "institution": 92055,
+        "individual": -93118,
+        "foreignTotal": 3710945,
+        "foreignPct": 19.88
+      },
+      {
+        "date": "20260313",
+        "close": 166000,
+        "priceChange": 200,
+        "changeRate": 0.12,
+        "volume": 295946,
+        "foreign": -34444,
+        "institution": 44014,
+        "individual": -9570,
+        "foreignTotal": 3679589,
+        "foreignPct": 19.71
+      },
+      {
+        "date": "20260316",
+        "close": 158100,
+        "priceChange": -7900,
+        "changeRate": -4.76,
+        "volume": 199517,
+        "foreign": -34734,
+        "institution": 31715,
+        "individual": 3019,
+        "foreignTotal": 3643413,
+        "foreignPct": 19.51
+      },
+      {
+        "date": "20260317",
+        "close": 165000,
+        "priceChange": 6900,
+        "changeRate": 4.36,
+        "volume": 202124,
+        "foreign": 1513,
+        "institution": 29345,
+        "individual": -30858,
+        "foreignTotal": 3658151,
+        "foreignPct": 19.59
+      },
+      {
+        "date": "20260318",
+        "close": 193600,
+        "priceChange": 28600,
+        "changeRate": 17.33,
+        "volume": 492071,
+        "foreign": 13088,
+        "institution": 79214,
+        "individual": -92302,
+        "foreignTotal": 3676521,
+        "foreignPct": 19.69
+      }
+    ],
+    "cumulative": {},
+    "summary": {
+      "foreign": "외국인 순매도 146,633주",
+      "institution": "기관 순매수 362,581주",
+      "individual": "개인 순매도 215,948주",
+      "foreignNet": -146633,
+      "institutionNet": 362581,
+      "individualNet": -215948
+    }
+  },
+  "screenshots": [],
+  "capturedAt": "2026-03-19T04:33:38.055Z"
+}

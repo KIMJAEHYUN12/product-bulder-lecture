@@ -76,19 +76,18 @@ function PriceCard({ data, loading, error }: { data: FuturesData | null; loading
   );
 }
 
-/** IB 날짜 "YYYYMMDD HH:mm:ss" → lightweight-charts 시간값 (UTC 초) */
+/** IB 날짜 "YYYYMMDD HH:mm:ss" → lightweight-charts 시간값 (KST 표시용) */
 function parseBarTime(dateStr: string): import("lightweight-charts").Time {
-  // "20260320 18:01:00" → Date
   const y = dateStr.slice(0, 4);
   const m = dateStr.slice(4, 6);
   const d = dateStr.slice(6, 8);
-  const rest = dateStr.slice(9); // "HH:mm:ss"
-  // IB 데이터는 KST이므로 KST offset(-9h) 적용하여 UTC로 변환
-  const dt = new Date(`${y}-${m}-${d}T${rest}+09:00`);
+  const rest = dateStr.slice(9, 17); // "HH:mm:ss" (타임존 접미사 제거)
+  // KST 시간을 그대로 표시하기 위해 UTC로 간주
+  const dt = new Date(`${y}-${m}-${d}T${rest}Z`);
   return Math.floor(dt.getTime() / 1000) as import("lightweight-charts").Time;
 }
 
-function FuturesChart({ bars }: { bars: FuturesBar[] }) {
+function FuturesChart({ bars, openPrice, prevClose }: { bars: FuturesBar[]; openPrice?: number; prevClose?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof import("lightweight-charts").createChart> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,19 +95,23 @@ function FuturesChart({ bars }: { bars: FuturesBar[] }) {
   const prevCountRef = useRef(0);
   const roRef = useRef<ResizeObserver | null>(null);
 
+  // 시가 대비 상승/하락 색상
+  const lastClose = bars.length > 0 ? bars[bars.length - 1].close : 0;
+  const lineColor = openPrice && lastClose >= openPrice ? "#ef4444" : "#3b82f6";
+
   useEffect(() => {
     if (!containerRef.current || bars.length === 0) return;
 
     let disposed = false;
 
     (async () => {
-      const { createChart, LineSeries, ColorType } = await import("lightweight-charts");
+      const { createChart, LineSeries, ColorType, LineStyle } = await import("lightweight-charts");
       if (disposed || !containerRef.current) return;
 
       // 차트가 이미 있으면 데이터만 업데이트
       if (chartRef.current && seriesRef.current) {
+        seriesRef.current.applyOptions({ color: lineColor });
         if (bars.length > prevCountRef.current) {
-          // 새 바만 append
           const newBars = bars.slice(prevCountRef.current);
           for (const bar of newBars) {
             seriesRef.current.update({
@@ -117,7 +120,6 @@ function FuturesChart({ bars }: { bars: FuturesBar[] }) {
             });
           }
         } else {
-          // 전체 교체 (데이터가 줄었거나 같으면)
           seriesRef.current.setData(
             bars.map((b) => ({ time: parseBarTime(b.date), value: b.close }))
           );
@@ -156,7 +158,7 @@ function FuturesChart({ bars }: { bars: FuturesBar[] }) {
       });
 
       const series = chart.addSeries(LineSeries, {
-        color: "#22d3ee",
+        color: lineColor,
         lineWidth: 2,
         priceLineVisible: true,
         lastValueVisible: true,
@@ -168,7 +170,43 @@ function FuturesChart({ bars }: { bars: FuturesBar[] }) {
         value: b.close,
       }));
       series.setData(data);
-      chart.timeScale().fitContent();
+
+      // 시가선 (주황 점선)
+      if (openPrice && openPrice > 0) {
+        series.createPriceLine({
+          price: openPrice,
+          color: "#f4a261",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: "시가",
+        });
+      }
+
+      // 전일종가선 (회색 점선)
+      if (prevClose && prevClose > 0) {
+        series.createPriceLine({
+          price: prevClose,
+          color: "#6b7280",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: "전일종가",
+        });
+      }
+
+      // x축 최소 2시간 범위 보장
+      const firstTime = parseBarTime(bars[0].date) as number;
+      const lastTime = parseBarTime(bars[bars.length - 1].date) as number;
+      const minRange = 2 * 60 * 60; // 2시간 (초)
+      if (lastTime - firstTime < minRange) {
+        chart.timeScale().setVisibleRange({
+          from: firstTime as import("lightweight-charts").Time,
+          to: (firstTime + minRange) as import("lightweight-charts").Time,
+        });
+      } else {
+        chart.timeScale().fitContent();
+      }
 
       chartRef.current = chart;
       seriesRef.current = series;
@@ -188,7 +226,7 @@ function FuturesChart({ bars }: { bars: FuturesBar[] }) {
     return () => {
       disposed = true;
     };
-  }, [bars]);
+  }, [bars, lineColor, openPrice, prevClose]);
 
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
@@ -218,6 +256,7 @@ function FuturesChart({ bars }: { bars: FuturesBar[] }) {
     <section className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-overlay)] p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-medium text-[var(--text-muted)]">1분봉 차트</span>
+        <span className="text-xs text-red-500">20분 지연데이터입니다. 참고 부탁드립니다.</span>
         <span className="text-[10px] text-[var(--text-faint)]">{bars.length}봉</span>
       </div>
       <div ref={containerRef} className="w-full" />
@@ -234,42 +273,46 @@ export default function FuturesTestPage() {
   const [dayError, setDayError] = useState<string | null>(null);
   const [nightError, setNightError] = useState<string | null>(null);
 
-  const loadDay = useCallback(async () => {
-    setDayLoading(true);
-    setDayError(null);
+  const loadDay = useCallback(async (silent = false) => {
+    if (!silent) { setDayLoading(true); setDayError(null); }
     try {
       const res = await fetchKospiFutures("day");
       setDayData(res);
+      setDayError(null);
     } catch (err) {
-      setDayError(err instanceof Error ? err.message : "조회 실패");
-      setDayData(null);
+      if (!silent) {
+        setDayError(err instanceof Error ? err.message : "조회 실패");
+        setDayData(null);
+      }
     } finally {
-      setDayLoading(false);
+      if (!silent) setDayLoading(false);
     }
   }, []);
 
-  const loadNight = useCallback(async () => {
-    setNightLoading(true);
-    setNightError(null);
+  const loadNight = useCallback(async (silent = false) => {
+    if (!silent) { setNightLoading(true); setNightError(null); }
     try {
       const res = await fetchKospiFutures("night");
       setNightData(res);
+      setNightError(null);
     } catch (err) {
-      setNightError(err instanceof Error ? err.message : "조회 실패");
-      setNightData(null);
+      if (!silent) {
+        setNightError(err instanceof Error ? err.message : "조회 실패");
+        setNightData(null);
+      }
     } finally {
-      setNightLoading(false);
+      if (!silent) setNightLoading(false);
     }
   }, []);
 
-  const loadAll = useCallback(() => {
-    loadDay();
-    loadNight();
+  const loadAll = useCallback((silent = false) => {
+    loadDay(silent);
+    loadNight(silent);
   }, [loadDay, loadNight]);
 
   useEffect(() => {
-    loadAll();
-    const timer = setInterval(loadAll, 30000);
+    loadAll(false);
+    const timer = setInterval(() => loadAll(true), 30000);
     return () => clearInterval(timer);
   }, [loadAll]);
 
@@ -285,7 +328,7 @@ export default function FuturesTestPage() {
   const currentData = tab === "day" ? dayData : nightData;
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    <div className="dark min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
       {/* 헤더 */}
       <header className="border-b border-[var(--border-primary)] px-4 py-3">
         <div className="mx-auto flex max-w-2xl items-center gap-3">
@@ -296,7 +339,7 @@ export default function FuturesTestPage() {
           <span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium ${badgeColor}`}>{status}</span>
           <button
             type="button"
-            onClick={loadAll}
+            onClick={() => loadAll()}
             disabled={loading}
             className="ml-auto flex items-center gap-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-overlay)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
           >
@@ -342,9 +385,19 @@ export default function FuturesTestPage() {
           error={tab === "day" ? dayError : nightError}
         />
 
-        {/* 야간 1분봉 차트 */}
+        {/* 분봉 차트 */}
+        {tab === "day" && dayData?.bars && (
+          <FuturesChart bars={dayData.bars} openPrice={dayData.open} prevClose={dayData.prevClose} />
+        )}
         {tab === "night" && nightData?.bars && (
-          <FuturesChart bars={nightData.bars} />
+          <FuturesChart
+            bars={nightData.bars.filter((b) => {
+              const hh = parseInt(b.date.slice(9, 11), 10);
+              return hh >= 18 || hh < 6;
+            })}
+            openPrice={nightData.open}
+            prevClose={nightData.prevClose}
+          />
         )}
 
       </div>

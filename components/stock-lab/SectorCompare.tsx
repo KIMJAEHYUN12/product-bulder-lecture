@@ -1,5 +1,6 @@
 "use client";
 
+import { Skeleton } from "@/components/Skeleton";
 import type { StockPrice } from "@/lib/stockPricesApi";
 import type { StockSearchResult } from "@/lib/stockSearchApi";
 
@@ -133,8 +134,10 @@ export function SectorCompare({
         );
       })}
       {isLoading && (
-        <div className="text-xs text-gray-500 font-mono text-center py-2 animate-pulse">
-          섹터 데이터 로딩 중...
+        <div className="space-y-2 py-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-3/4" />
         </div>
       )}
     </div>

@@ -10,7 +10,7 @@ import {
 } from "@/lib/investorQuiz";
 import { generateInvestorShareImage } from "./InvestorShareCard";
 
-const SITE_URL = "https://mylen-24263782-5d205.web.app/mock-investment";
+const SITE_URL = "https://bitgak.co.kr/mock-investment";
 
 interface Props {
   onComplete: (result: InvestorType) => void;
@@ -61,55 +61,31 @@ export function InvestorQuizModal({ onComplete, onClose }: Props) {
   async function handleShare() {
     if (!result || sharingLoading) return;
     setSharingLoading(true);
+    const friendlyText =
+      `나 ${result.name}래 ㅋㅋ\n` +
+      `"${result.kimComment.slice(0, 45)}..."\n\n` +
+      `오비젼 투자성향 테스트 해봐`;
 
     try {
       const blob = await generateInvestorShareImage(result);
-      const friendlyText =
-        `나 ${result.name}래 ㅋㅋ\n` +
-        `"${result.kimComment.slice(0, 45)}..."\n\n` +
-        `오비젼 투자성향 테스트 해봐 👇`;
+      if (!blob) return;
 
-      const isMobile = navigator.maxTouchPoints > 0;
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
 
-      // ── 모바일: Web Share API로 이미지 파일 공유 ──
-      if (isMobile && navigator.share) {
-        try {
-          if (blob && typeof navigator.canShare === "function") {
-            const file = new File([blob], "ovision-investor-type.png", { type: "image/png" });
-            if (navigator.canShare({ files: [file] })) {
-              await navigator.share({ files: [file], text: friendlyText });
-              return;
-            }
-          }
-          await navigator.share({ title: "오비젼 투자성향 테스트", text: friendlyText, url: SITE_URL });
-          return;
-        } catch {
-          // 취소 or 실패 → PC 방식으로 fallback
-        }
-      }
+      let imageCopied = false;
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": blob }),
+        ]);
+        imageCopied = true;
+      } catch { /* clipboard image not supported */ }
 
-      // ── PC (또는 모바일 fallback): 클립보드 이미지 복사 + 미리보기 모달 ──
-      if (blob) {
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-
-        // 이미지를 클립보드에 직접 복사 (Chrome/Edge/Safari 지원)
-        let imageCopied = false;
-        try {
-          await navigator.clipboard.write([
-            new ClipboardItem({ "image/png": blob }),
-          ]);
-          imageCopied = true;
-        } catch {
-          // 클립보드 이미지 미지원 → 모달에서 직접 저장 유도
-        }
-
-        setSharePreview({ dataUrl, blob, text: friendlyText, imageCopied });
-      }
+      setSharePreview({ dataUrl, blob, text: friendlyText, imageCopied });
     } finally {
       setSharingLoading(false);
     }
@@ -140,7 +116,7 @@ export function InvestorQuizModal({ onComplete, onClose }: Props) {
               {/* 헤더 */}
               <div className="px-5 pt-5 pb-3">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] text-gray-400 font-mono">
+                  <span className="text-xs text-gray-400 font-mono">
                     {currentIdx + 1} / {QUIZ_QUESTIONS.length}
                   </span>
                   <button
@@ -198,7 +174,7 @@ export function InvestorQuizModal({ onComplete, onClose }: Props) {
                           className={`w-full text-left px-4 py-3 rounded-xl border text-sm font-mono transition-colors ${
                             isChosen
                               ? "bg-kim-red border-kim-red text-white"
-                              : "bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:border-kim-red/50 hover:bg-kim-red/5"
+                              : "bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-700 dark:text-zinc-300 hover:border-kim-red/50 hover:bg-kim-red/5"
                           } disabled:cursor-not-allowed`}
                         >
                           {opt.label}
@@ -235,7 +211,7 @@ export function InvestorQuizModal({ onComplete, onClose }: Props) {
                   {result.traits.map((t, i) => (
                     <div key={i} className="flex items-start gap-2 text-xs font-mono">
                       <span className="text-kim-red shrink-0 mt-0.5">▸</span>
-                      <span className="text-gray-700 dark:text-gray-300">{t}</span>
+                      <span className="text-gray-700 dark:text-zinc-300">{t}</span>
                     </div>
                   ))}
                 </div>
@@ -247,7 +223,7 @@ export function InvestorQuizModal({ onComplete, onClose }: Props) {
                   <p className="text-[10px] text-green-600 dark:text-green-400 font-mono font-bold mb-1.5">💪 강점</p>
                   <div className="flex flex-col gap-1">
                     {result.strengths.map((s, i) => (
-                      <p key={i} className="text-[11px] text-gray-600 dark:text-gray-400 font-mono leading-relaxed">{s}</p>
+                      <p key={i} className="text-xs text-gray-600 dark:text-zinc-400 font-mono leading-relaxed">{s}</p>
                     ))}
                   </div>
                 </div>
@@ -255,7 +231,7 @@ export function InvestorQuizModal({ onComplete, onClose }: Props) {
                   <p className="text-[10px] text-orange-500 font-mono font-bold mb-1.5">⚠️ 주의</p>
                   <div className="flex flex-col gap-1">
                     {result.warnings.map((w, i) => (
-                      <p key={i} className="text-[11px] text-gray-600 dark:text-gray-400 font-mono leading-relaxed">{w}</p>
+                      <p key={i} className="text-xs text-gray-600 dark:text-zinc-400 font-mono leading-relaxed">{w}</p>
                     ))}
                   </div>
                 </div>
@@ -264,7 +240,7 @@ export function InvestorQuizModal({ onComplete, onClose }: Props) {
               {/* 오비젼 한마디 */}
               <div className="bg-gray-100 dark:bg-black/30 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-3">
                 <div className="text-[10px] text-gray-400 font-mono mb-1">오비젼의 한마디</div>
-                <p className="text-xs text-gray-700 dark:text-gray-300 font-mono">
+                <p className="text-xs text-gray-700 dark:text-zinc-300 font-mono">
                   💬 &ldquo;{result.kimComment}&rdquo;
                 </p>
               </div>
@@ -321,13 +297,13 @@ export function InvestorQuizModal({ onComplete, onClose }: Props) {
                   /* 이미지 클립보드 복사 성공 */
                   <div className="bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-3 text-center">
                     <p className="text-green-400 font-bold text-sm mb-0.5">✓ 이미지가 클립보드에 복사됐어요!</p>
-                    <p className="text-[11px] text-gray-400 font-mono">
+                    <p className="text-xs text-gray-400 font-mono">
                       카카오톡 · 메시지 등에서 <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white">Ctrl+V</kbd> 로 바로 붙여넣기 하세요
                     </p>
                   </div>
                 ) : (
                   /* 클립보드 미지원 → 저장 유도 */
-                  <p className="text-[11px] text-gray-500 font-mono text-center">
+                  <p className="text-xs text-gray-500 font-mono text-center">
                     이미지를 저장하거나 텍스트를 복사해서 공유하세요
                   </p>
                 )}

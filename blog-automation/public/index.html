@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SimplyStock 블로그 생성기 v2</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f0f14;
+      --card: #16161e;
+      --border: #2a2a3a;
+      --text: #e0e0e0;
+      --muted: #6b7280;
+      --accent: #6366f1;
+      --accent-light: #a5b4fc;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+    .header { text-align: center; margin-bottom: 32px; }
+    .header h1 { font-size: 24px; color: #fff; margin-bottom: 4px; }
+    .header p { color: var(--muted); font-size: 14px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card h2 {
+      font-size: 16px;
+      color: var(--accent-light);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card h2 .badge {
+      font-size: 11px;
+      background: var(--accent);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .input-group { margin-bottom: 12px; }
+    .input-group label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+    input[type="text"], input[type="number"], textarea {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 80px; font-family: inherit; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: 0.9; }
+    .btn-outline { background: transparent; color: var(--accent-light); border: 1px solid var(--border); }
+    .btn-outline:hover:not(:disabled) { background: rgba(99,102,241,0.1); }
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+    .checkbox-row input[type="checkbox"] { accent-color: var(--accent); }
+    .checkbox-row label { font-size: 13px; color: var(--muted); cursor: pointer; }
+
+    .log { margin-top: 12px; max-height: 200px; overflow-y: auto; }
+    .log-item {
+      font-size: 13px;
+      padding: 4px 0;
+      color: var(--muted);
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .log-item.active { color: var(--accent-light); }
+    .log-item.done { color: var(--success); }
+    .log-item.warn { color: var(--warning); }
+    .log-item.err { color: var(--danger); }
+
+    /* Screenshots grid */
+    .thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+    .thumb {
+      aspect-ratio: 4/3;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      background: var(--bg);
+      position: relative;
+      cursor: pointer;
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .thumb .label {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 2px 4px;
+      font-size: 10px;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      text-align: center;
+    }
+    .thumb.pending { display: flex; align-items: center; justify-content: center; }
+    .thumb.pending::after { content: '...'; color: var(--muted); font-size: 12px; }
+    .thumb.empty { border-style: dashed; display: flex; align-items: center; justify-content: center; }
+    .thumb.empty::after { content: '+'; color: var(--muted); font-size: 20px; }
+
+    /* Drop zone */
+    .dropzone {
+      display: none;
+      margin-top: 12px;
+      padding: 20px;
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .dropzone.visible { display: block; }
+    .dropzone.dragover { border-color: var(--accent); background: rgba(99,102,241,0.05); }
+    .dropzone input { display: none; }
+
+    /* DART Form */
+    .dart-form { display: none; }
+    .dart-form.visible { display: block; }
+    .dart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .dart-section { margin-bottom: 16px; }
+    .dart-section h3 { font-size: 14px; color: var(--accent-light); margin-bottom: 8px; }
+
+    /* Streaming output */
+    .stream-output {
+      display: none;
+      margin-top: 12px;
+      max-height: 500px;
+      overflow-y: auto;
+      padding: 16px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    .stream-output.visible { display: block; }
+    .stream-output h1, .stream-output h2, .stream-output h3 { color: var(--accent-light); margin: 16px 0 8px; }
+    .stream-output h1 { font-size: 20px; }
+    .stream-output h2 { font-size: 17px; }
+    .stream-output h3 { font-size: 15px; }
+    .stream-output table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+    .stream-output th, .stream-output td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; font-size: 13px; }
+    .stream-output th { background: rgba(99,102,241,0.1); }
+    .stream-output img { max-width: 100%; border-radius: 6px; margin: 8px 0; }
+    .stream-output em { color: var(--muted); }
+    .stream-output strong { color: #fff; }
+    .stream-output hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+    .stream-output blockquote { border-left: 3px solid var(--accent); padding-left: 12px; color: var(--muted); }
+    .stream-output ul, .stream-output ol { padding-left: 20px; }
+
+    .result-bar {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(34,197,94,0.1);
+      border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 8px;
+    }
+    .result-bar.visible { display: block; }
+    .result-bar .title { font-size: 14px; color: var(--success); font-weight: 600; }
+    .result-bar .info { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .full-width { grid-column: 1 / -1; }
+
+    .warn-box {
+      display: none;
+      margin-top: 8px;
+      padding: 10px 12px;
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--warning);
+    }
+    .warn-box.visible { display: block; }
+
+    .btn-copy-big {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 24px;
+      background: var(--success);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn-copy-big:hover { opacity: 0.9; }
+    .btn-copy-big:active { transform: scale(0.97); }
+    .btn-copy-big.copied { background: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>SimplyStock 블로그 생성기</h1>
+      <p>Gemini 2.5 Flash + 스크린샷 + DART -- 자동 종목 분석 블로그</p>
+    </div>
+
+    <div class="grid">
+      <!-- 좌: 수집 패널 -->
+      <div class="card" id="collectCard">
+        <h2>1단계 -- 데이터 수집 <span class="badge">Step 1</span></h2>
+
+        <div class="input-group">
+          <label>종목명 또는 종목코드</label>
+          <input type="text" id="stockQuery" placeholder="삼성전자 또는 005930">
+        </div>
+
+        <div class="checkbox-row">
+          <input type="checkbox" id="noScreenshot" checked>
+          <label for="noScreenshot">스크린샷 수동 첨부 (권장 -- 직접 캡처한 이미지 사용)</label>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" id="collectBtn" onclick="startCollect()">수집 시작</button>
+        </div>
+
+        <div class="log" id="collectLog"></div>
+
+        <!-- 스크린샷 그리드 (자동/수동 공용) -->
+        <div class="thumbs" id="thumbGrid" style="display:none"></div>
+
+        <!-- 수동 업로드 드롭존 -->
+        <div class="dropzone" id="dropzone">
+          <p>스크린샷을 여기에 드래그하거나 클릭하여 추가</p>
+          <p style="margin-top:4px;font-size:11px;color:var(--muted)">SimplyStock에서 직접 캡처한 이미지 (순서 무관, 여러 장 동시 가능)</p>
+          <input type="file" id="fileInput" accept="image/*" multiple>
+        </div>
+
+        <div class="warn-box" id="ssWarnBox">
+          자동 캡처 실패. 위 영역에 SimplyStock 스크린샷을 직접 드래그해주세요.
+        </div>
+      </div>
+
+      <!-- 우: 생성 패널 -->
+      <div class="card" id="generateCard">
+        <h2>2단계 -- 글 생성 <span class="badge">Step 2</span></h2>
+
+        <div class="dart-form" id="dartForm">
+          <div class="dart-section">
+            <h3>DART 수치 입력 (선택사항)</h3>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+              사업보고서에서 직접 확인한 수치를 입력하면 더 정확한 분석이 가능합니다.
+            </p>
+            <div class="dart-grid">
+              <div class="input-group">
+                <label>2025 매출액 (억원)</label>
+                <input type="number" id="dart_revenue" placeholder="예: 3336059">
+              </div>
+              <div class="input-group">
+                <label>2025 영업이익 (억원)</label>
+                <input type="number" id="dart_op" placeholder="예: 432582">
+              </div>
+              <div class="input-group">
+                <label>2025 당기순이익 (억원)</label>
+                <input type="number" id="dart_ni" placeholder="예: 345261">
+              </div>
+              <div class="input-group">
+                <label>시가총액 (조원)</label>
+                <input type="number" id="dart_mktcap" placeholder="예: 1102" step="0.1">
+              </div>
+            </div>
+          </div>
+
+          <div class="dart-section">
+            <h3>사업부문별 실적 (자유입력)</h3>
+            <div class="input-group">
+              <label>사업부문별 매출/영업이익 (텍스트)</label>
+              <textarea id="dart_segments" placeholder="예:&#10;DX: 매출 187조, 영업이익 12.8조&#10;DS: 매출 130조, 영업이익 24.8조&#10;SDC: 매출 29.8조, 영업이익 4.1조"></textarea>
+            </div>
+          </div>
+
+          <div class="dart-section">
+            <h3>추가 정보 (자유입력)</h3>
+            <div class="input-group">
+              <label>증권사 전망, 이슈, 특이사항 등</label>
+              <textarea id="dart_extra" placeholder="예:&#10;Forward PER 6.4배&#10;테슬라 파운드리 수주 165억달러&#10;DRAM 점유율 42%->34%"></textarea>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-primary" id="generateBtn" onclick="startGenerate()">글 생성 시작</button>
+            <button class="btn btn-outline" id="previewBtn" onclick="openPreview()" style="display:none">미리보기</button>
+            <button class="btn btn-outline" id="copyBtn" onclick="copyPost()" style="display:none">본문 복사</button>
+          </div>
+        </div>
+
+        <div id="generateWait" style="color:var(--muted);font-size:14px">
+          먼저 1단계에서 데이터를 수집하세요.
+        </div>
+
+        <div class="log" id="generateLog"></div>
+
+        <div class="result-bar" id="resultBar">
+          <div class="title" id="resultTitle"></div>
+          <div class="info" id="resultInfo"></div>
+        </div>
+      </div>
+
+      <!-- 전체 너비: 스트리밍 출력 -->
+      <div class="card full-width">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <h2>생성 결과</h2>
+          <button class="btn btn-copy-big" id="copyBtnBig" onclick="copyPost()" style="display:none">전체 복사</button>
+        </div>
+        <div class="stream-output" id="streamOutput">
+          <p style="color:var(--muted)">글 생성을 시작하면 여기에 실시간으로 표시됩니다.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentSessionId = null;
+    let currentStockCode = null;
+    let rawMarkdown = "";
+    let uploadedCount = 0;
+
+    const SCREENSHOT_NAMES = [
+      "daily_1m", "daily_max", "weekly", "monthly_max",
+      "supply_combined", "supply_detail", "trading", "valuation"
+    ];
+    const SCREENSHOT_LABELS = [
+      "일봉 1M", "일봉 MAX", "주봉", "월봉 MAX",
+      "수급 합산", "수급 주체별", "매매동향", "밸류에이션"
+    ];
+    const DART_LABELS = {
+      "dart_01_매출실적": "DART 매출실적",
+      "dart_02_연결재무상태표": "DART 재무상태표",
+      "dart_03_포괄손익계산서": "DART 손익계산서",
+      "dart_audit": "DART 감사보고서",
+      "dart_semi": "DART 반기보고서",
+      "dart_quarterly": "DART 분기보고서",
+      "dart_critical": "DART 주요공시",
+      "dart_stake": "DART 대량보유",
+      "dart_corporate": "DART 기업공시",
+    };
+
+    // ===== 수집 =====
+    async function startCollect() {
+      const query = document.getElementById("stockQuery").value.trim();
+      if (!query) return alert("종목명 또는 코드를 입력하세요");
+
+      const btn = document.getElementById("collectBtn");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> 수집 중...';
+
+      const log = document.getElementById("collectLog");
+      log.innerHTML = "";
+
+      const thumbGrid = document.getElementById("thumbGrid");
+      const noScreenshot = document.getElementById("noScreenshot").checked;
+
+      // 수동 모드: 빈 업로드 슬롯, 자동 모드: pending 슬롯
+      thumbGrid.style.display = "grid";
+      thumbGrid.innerHTML = SCREENSHOT_LABELS.map((l, i) =>
+        noScreenshot
+          ? `<div class="thumb empty" data-slot="${i}" onclick="triggerUploadSlot(${i})"><span class="label">${l}</span></div>`
+          : `<div class="thumb pending"><span class="label">${l}</span></div>`
+      ).join("");
+
+      uploadedCount = 0;
+
+      try {
+        const res = await fetch("/api/collect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, noScreenshot }),
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              handleCollectMsg(JSON.parse(line.slice(6)), log, thumbGrid);
+            } catch {}
+          }
+        }
+      } catch (err) {
+        addLog(log, "오류: " + err.message, "err");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "수집 시작";
+      }
+    }
+
+    function handleCollectMsg(msg, log, thumbGrid) {
+      switch (msg.type) {
+        case "step":
+          addLog(log, "[" + msg.step + "/" + msg.total + "] " + msg.message, "active");
+          break;
+        case "stock":
+          currentStockCode = msg.stockCode;
+          addLog(log, "종목: " + msg.name + " (" + msg.symbol + ")", "done");
+          break;
+        case "data":
+          addLog(log, "재무 " + msg.financials.years + "개년 / 공시 " + msg.disclosures + "건 / 수급 " + (msg.supply ? "OK" : "실패") + " / 현재가 " + (msg.price ? msg.price.toLocaleString() + "원" : "실패"), "done");
+          break;
+        case "screenshot": {
+          const idx = msg.index - 1;
+          const t = thumbGrid.children[idx];
+          if (t) {
+            t.classList.remove("pending");
+            t.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--success);font-size:18px">OK</div><span class="label">' + SCREENSHOT_LABELS[idx] + '</span>';
+          }
+          addLog(log, "  스크린샷 " + msg.index + "/" + msg.total + ": " + msg.description, "active");
+          break;
+        }
+        case "warning":
+          addLog(log, msg.message, "warn");
+          document.getElementById("ssWarnBox").classList.add("visible");
+          showDropzone();
+          break;
+        case "error":
+          addLog(log, "오류: " + msg.message, "err");
+          break;
+        case "complete":
+          currentSessionId = msg.sessionId;
+          addLog(log, "수집 완료!", "done");
+
+          if (msg.screenshots && msg.screenshots.length) {
+            msg.screenshots.forEach((file, i) => {
+              const t = thumbGrid.children[i];
+              if (t) {
+                t.classList.remove("pending");
+                t.innerHTML = '<img src="/api/images/' + encodeURIComponent(msg.sessionId) + '/' + file + '"><span class="label">' + SCREENSHOT_LABELS[i] + '</span>';
+              }
+            });
+          }
+
+          // DART 스크린샷 썸네일 추가
+          if (msg.dartScreenshots && msg.dartScreenshots.length) {
+            msg.dartScreenshots.forEach((file) => {
+              const suffix = file.replace(/^\d{6}_/, "").replace(/\.png$/, "");
+              const label = DART_LABELS[suffix] || suffix;
+              const div = document.createElement("div");
+              div.className = "thumb";
+              div.innerHTML = '<img src="/api/images/' + encodeURIComponent(msg.sessionId) + '/' + file + '"><span class="label">' + label + '</span>';
+              thumbGrid.appendChild(div);
+            });
+          }
+
+          // 수동 모드면 드롭존 표시
+          if (document.getElementById("noScreenshot").checked) {
+            showDropzone();
+          }
+
+          // 2단계 활성화
+          document.getElementById("dartForm").classList.add("visible");
+          document.getElementById("generateWait").style.display = "none";
+          break;
+      }
+    }
+
+    // ===== 수동 업로드 =====
+    function showDropzone() {
+      document.getElementById("dropzone").classList.add("visible");
+    }
+
+    function triggerUploadSlot(slotIdx) {
+      const input = document.getElementById("fileInput");
+      input.dataset.slot = slotIdx;
+      input.click();
+    }
+
+    // 드롭존 이벤트
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("fileInput");
+
+    dropzone.addEventListener("click", () => fileInput.click());
+    dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      handleFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener("change", (e) => {
+      handleFiles(e.target.files);
+      fileInput.value = "";
+    });
+
+    async function handleFiles(fileList) {
+      if (!currentSessionId || !currentStockCode) return alert("먼저 데이터를 수집하세요");
+
+      const files = Array.from(fileList).filter(f => f.type.startsWith("image/"));
+      if (!files.length) return;
+
+      const images = [];
+      const thumbGrid = document.getElementById("thumbGrid");
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const slotIdx = uploadedCount + i;
+        if (slotIdx >= 8) break;
+
+        const base64 = await fileToBase64(file);
+        const name = currentStockCode + "_" + SCREENSHOT_NAMES[slotIdx] + ".png";
+        images.push({ name, data: base64 });
+
+        // 썸네일 업데이트
+        const t = thumbGrid.children[slotIdx];
+        if (t) {
+          t.classList.remove("empty", "pending");
+          t.innerHTML = '<img src="' + URL.createObjectURL(file) + '"><span class="label">' + SCREENSHOT_LABELS[slotIdx] + '</span>';
+        }
+      }
+
+      uploadedCount += images.length;
+
+      // 서버에 업로드
+      try {
+        const res = await fetch("/api/upload-images/" + encodeURIComponent(currentSessionId), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ images }),
+        });
+        const result = await res.json();
+        addLog(document.getElementById("collectLog"), "이미지 " + result.saved.length + "장 업로드 완료", "done");
+      } catch (err) {
+        addLog(document.getElementById("collectLog"), "업로드 실패: " + err.message, "err");
+      }
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(",")[1]);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ===== 생성 =====
+    async function startGenerate() {
+      if (!currentSessionId) return alert("먼저 데이터를 수집하세요");
+
+      const btn = document.getElementById("generateBtn");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> 생성 중...';
+
+      const log = document.getElementById("generateLog");
+      log.innerHTML = "";
+      const output = document.getElementById("streamOutput");
+      output.classList.add("visible");
+      output.innerHTML = "";
+      rawMarkdown = "";
+
+      const dartInput = {};
+      const rev = document.getElementById("dart_revenue").value;
+      const op = document.getElementById("dart_op").value;
+      const ni = document.getElementById("dart_ni").value;
+      const mc = document.getElementById("dart_mktcap").value;
+      const seg = document.getElementById("dart_segments").value.trim();
+      const extra = document.getElementById("dart_extra").value.trim();
+
+      if (rev) dartInput.revenue_억원 = Number(rev);
+      if (op) dartInput.operating_profit_억원 = Number(op);
+      if (ni) dartInput.net_income_억원 = Number(ni);
+      if (mc) dartInput.market_cap_조원 = Number(mc);
+      if (seg) dartInput.segments = seg;
+      if (extra) dartInput.extra_info = extra;
+
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: currentSessionId,
+            dartInput: Object.keys(dartInput).length ? dartInput : undefined,
+          }),
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              handleGenerateMsg(JSON.parse(line.slice(6)), log, output);
+            } catch {}
+          }
+        }
+      } catch (err) {
+        addLog(log, "오류: " + err.message, "err");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "글 생성 시작";
+      }
+    }
+
+    let renderTimer = null;
+    function handleGenerateMsg(msg, log, output) {
+      switch (msg.type) {
+        case "step":
+          addLog(log, msg.message, "active");
+          break;
+        case "token":
+          rawMarkdown += msg.text;
+          if (!renderTimer) {
+            renderTimer = setTimeout(() => { renderMarkdown(output); renderTimer = null; }, 200);
+          }
+          break;
+        case "done":
+          clearTimeout(renderTimer);
+          renderMarkdown(output);
+          addLog(log, "생성 완료!", "done");
+          document.getElementById("resultBar").classList.add("visible");
+          document.getElementById("resultTitle").textContent = msg.title;
+          document.getElementById("resultInfo").textContent = msg.bodyLength.toLocaleString() + "자 | 태그: " + msg.tags.join(", ");
+          document.getElementById("previewBtn").style.display = "";
+          document.getElementById("copyBtn").style.display = "";
+          document.getElementById("copyBtnBig").style.display = "";
+          break;
+        case "error":
+          addLog(log, "오류: " + msg.message, "err");
+          break;
+      }
+    }
+
+    function renderMarkdown(output) {
+      let body = rawMarkdown;
+      const lines = body.split("\n");
+      let start = 0;
+      for (let i = 0; i < Math.min(lines.length, 10); i++) {
+        if (lines[i].trim().startsWith("[제목]") || lines[i].trim().startsWith("[태그]")) start = i + 1;
+      }
+      while (start < lines.length && !lines[start]?.trim()) start++;
+      body = lines.slice(start).join("\n");
+
+      if (currentSessionId) {
+        const sid = encodeURIComponent(currentSessionId);
+        // 마크다운 이미지 변환
+        body = body.replace(
+          /!\[([^\]]*)\]\(images\/([^)]+)\)/g,
+          "![$1](/api/images/" + sid + "/$2)"
+        );
+        // 📸 플레이스홀더 → 실제 이미지 변환
+        body = body.replace(
+          /📸\s*\[이미지\s*삽입[:\s]*([^—\]]*?)(?:—\s*(?:images\/)?([^\]\s]+\.png))?\s*\]/g,
+          function(match, desc, file) {
+            if (file) {
+              return "![" + desc.trim() + "](/api/images/" + sid + "/" + file + ")";
+            }
+            return match;
+          }
+        );
+      }
+      output.innerHTML = marked.parse(body);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    // ===== 유틸 =====
+    function addLog(container, text, cls) {
+      const div = document.createElement("div");
+      div.className = "log-item " + (cls || "");
+      div.textContent = text;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function openPreview() {
+      if (currentSessionId) window.open("/api/preview/" + encodeURIComponent(currentSessionId), "_blank");
+    }
+
+    async function copyPost() {
+      if (!currentSessionId) return;
+      try {
+        const res = await fetch("/api/post/" + encodeURIComponent(currentSessionId));
+        const text = await res.text();
+        await navigator.clipboard.writeText(text);
+        const btn = document.getElementById("copyBtn");
+        const bigBtn = document.getElementById("copyBtnBig");
+        btn.textContent = "복사됨!";
+        bigBtn.textContent = "복사 완료!";
+        bigBtn.classList.add("copied");
+        setTimeout(() => {
+          btn.textContent = "본문 복사";
+          bigBtn.textContent = "전체 복사";
+          bigBtn.classList.remove("copied");
+        }, 2000);
+      } catch (err) {
+        alert("복사 실패: " + err.message);
+      }
+    }
+
+    document.getElementById("stockQuery").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") startCollect();
+    });
+  </script>
+</body>
+</html>

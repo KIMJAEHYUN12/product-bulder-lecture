@@ -25,7 +25,7 @@ export function AiBriefing({ stockCount, briefing, briefingResult, isBriefingStr
       {showButton && (
         <motion.button
           onClick={onRequest}
-          className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-bold hover:from-blue-500 hover:to-purple-500 transition-all"
+          className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-all duration-300"
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
@@ -59,23 +59,23 @@ export function AiBriefing({ stockCount, briefing, briefingResult, isBriefingStr
           {/* verdict + riskLevel 배지 */}
           <div className="flex flex-wrap items-center gap-2">
             <span
-              className={`px-3 py-1 rounded-lg text-xs font-black ${
+              className={`px-3 py-1 rounded-lg text-xs font-black ring-1 ${
                 briefingResult.verdict === "매수"
-                  ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                  ? "bg-red-500/20 text-red-400 border border-red-500/30 ring-red-500/20"
                   : briefingResult.verdict === "매도"
-                  ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                  : "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+                  ? "bg-blue-500/20 text-blue-400 border border-blue-500/30 ring-blue-500/20"
+                  : "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 ring-yellow-500/20"
               }`}
             >
               {briefingResult.verdict}
             </span>
             <span
-              className={`px-2 py-1 rounded-md text-[10px] font-bold ${
+              className={`px-2 py-1 rounded-md text-[10px] font-bold ring-1 ${
                 briefingResult.riskLevel === "low"
-                  ? "bg-green-500/15 text-green-400"
+                  ? "bg-green-500/15 text-green-400 ring-green-500/20"
                   : briefingResult.riskLevel === "high"
-                  ? "bg-red-500/15 text-red-400"
-                  : "bg-yellow-500/15 text-yellow-400"
+                  ? "bg-red-500/15 text-red-400 ring-red-500/20"
+                  : "bg-yellow-500/15 text-yellow-400 ring-yellow-500/20"
               }`}
             >
               위험도 {briefingResult.riskLevel === "low" ? "낮음" : briefingResult.riskLevel === "high" ? "높음" : "보통"}

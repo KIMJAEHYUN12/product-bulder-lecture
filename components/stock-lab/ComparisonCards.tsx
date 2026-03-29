@@ -1,5 +1,6 @@
 "use client";
 
+import { Skeleton } from "@/components/Skeleton";
 import type { StockPrice } from "@/lib/stockPricesApi";
 
 const STOCK_COLORS = ["#ef4444", "#3b82f6", "#10b981"];
@@ -20,10 +21,10 @@ export function ComparisonCards({ stocks, priceMap }: Props) {
           return (
             <div
               key={s.symbol}
-              className="rounded-xl border border-white/10 bg-white/5 p-3 animate-pulse"
+              className="rounded-xl border border-white/10 bg-white/5 p-3"
             >
-              <div className="h-4 bg-white/10 rounded w-20 mb-2" />
-              <div className="h-6 bg-white/10 rounded w-28" />
+              <Skeleton className="h-4 w-20 mb-2" />
+              <Skeleton className="h-6 w-28" />
             </div>
           );
         }

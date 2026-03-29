@@ -1,5 +1,6 @@
 "use client";
 
+import { Skeleton } from "@/components/Skeleton";
 import { Sector } from "./SectorTabs";
 import { StockPrice } from "@/lib/stockPricesApi";
 import { Holding } from "@/hooks/useMockPortfolio";
@@ -313,14 +314,17 @@ export function StockList({
             {/* 가격 */}
             <div className="text-right min-w-[90px]">
               {pricesLoading && !price ? (
-                <div className="text-xs text-gray-400 font-mono">로딩중...</div>
+                <div className="flex flex-col items-end gap-1">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-3 w-12" />
+                </div>
               ) : price ? (
                 <>
                   <div className="text-sm font-mono font-bold text-gray-900 dark:text-white">
                     {fmt(Math.round(price))}
                   </div>
                   <div
-                    className={`text-[11px] font-mono ${
+                    className={`text-xs font-mono ${
                       changePct > 0
                         ? "text-red-500 dark:text-red-400"
                         : changePct < 0

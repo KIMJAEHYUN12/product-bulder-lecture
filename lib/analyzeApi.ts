@@ -1,6 +1,6 @@
 import type { AnalyzeRequest, AnalyzeResponse, AnalysisMode } from "@/types";
 
-const FIREBASE_HOST = "https://mylen-24263782-5d205.web.app";
+const FIREBASE_HOST = "https://bitgak.co.kr";
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   `${FIREBASE_HOST}/api/analyze`;
@@ -13,6 +13,89 @@ function extractRoastFromPartial(text: string): string | null {
     .replace(/\\n/g, "\n")
     .replace(/\\"/g, '"')
     .replace(/\\\\/g, "\\");
+}
+
+/** SSE 버퍼를 파싱하여 메시지를 처리하는 공용 헬퍼 */
+function processSSEBuffer(
+  buffer: string,
+  accumulated: string,
+  onRoastChunk: (partial: string) => void,
+  onComplete: (result: AnalyzeResponse) => void,
+): { buffer: string; accumulated: string; completed: boolean } {
+  const parts = buffer.split("\n\n");
+  buffer = parts.pop() ?? "";
+
+  for (const part of parts) {
+    if (!part.startsWith("data: ")) continue;
+    const jsonStr = part.slice(6).trim();
+    if (!jsonStr) continue;
+
+    let msg: Record<string, unknown>;
+    try {
+      msg = JSON.parse(jsonStr);
+    } catch {
+      continue;
+    }
+
+    if (msg.error) {
+      throw new Error(msg.error as string);
+    }
+
+    if (msg.done && msg.r) {
+      const result = sanitizeResponse(msg.r as AnalyzeResponse);
+      onComplete(result);
+      return { buffer, accumulated, completed: true };
+    }
+
+    if (msg.t) {
+      accumulated += msg.t as string;
+      const partial = extractRoastFromPartial(accumulated);
+      if (partial !== null) onRoastChunk(partial);
+    }
+  }
+
+  return { buffer, accumulated, completed: false };
+}
+
+/** scores 값을 안전하게 숫자로 변환 */
+function sanitizeScores(
+  scores: Record<string, unknown> | null | undefined,
+): AnalyzeResponse["scores"] {
+  if (!scores || typeof scores !== "object") return null;
+  const keys = ["diversification", "returns", "stability", "momentum", "risk_management"] as const;
+  const result: Record<string, number> = {};
+  for (const k of keys) {
+    const v = scores[k];
+    result[k] = typeof v === "number" ? v : (Number(v) || 0);
+  }
+  return result as unknown as AnalyzeResponse["scores"];
+}
+
+/** roast에 JSON 잔해가 섞여 있으면 정제 */
+function sanitizeRoast(roast: string): string {
+  if (!roast) return roast;
+  // roast 안에 JSON 필드명이 보이면 원본 JSON이 그대로 들어온 것
+  if (roast.includes('"sector"') || roast.includes('"grade"') || roast.trimStart().startsWith("```")) {
+    const match = roast.match(/"roast"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (match) {
+      return match[1]
+        .replace(/\\n/g, "\n")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\");
+    }
+  }
+  return roast;
+}
+
+/** 응답 데이터 정제 — 타입 안전성 확보 */
+function sanitizeResponse(raw: AnalyzeResponse): AnalyzeResponse {
+  return {
+    ...raw,
+    roast: sanitizeRoast(raw.roast),
+    scores: sanitizeScores(raw.scores as unknown as Record<string, unknown>),
+    grade: raw.grade ?? null,
+    sector: raw.sector ?? null,
+  };
 }
 
 export async function analyzePortfolioStream(
@@ -43,55 +126,48 @@ export async function analyzePortfolioStream(
 
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split("\n\n");
-      buffer = parts.pop() ?? "";
-
-      for (const part of parts) {
-        if (!part.startsWith("data: ")) continue;
-        const jsonStr = part.slice(6).trim();
-        if (!jsonStr) continue;
-
-        let msg: Record<string, unknown>;
-        try {
-          msg = JSON.parse(jsonStr);
-        } catch {
-          continue;
-        }
-
-        if (msg.error) {
-          throw new Error(msg.error as string);
-        }
-
-        if (msg.done && msg.r) {
-          completed = true;
-          onComplete(msg.r as AnalyzeResponse);
-          return;
-        }
-
-        if (msg.t) {
-          accumulated += msg.t as string;
-          const partial = extractRoastFromPartial(accumulated);
-          if (partial !== null) onRoastChunk(partial);
-        }
+      // done=true 이더라도 value에 남은 데이터가 있을 수 있음
+      if (value) {
+        buffer += decoder.decode(value, { stream: !done });
       }
+
+      if (buffer.includes("\n\n")) {
+        const result = processSSEBuffer(buffer, accumulated, onRoastChunk, onComplete);
+        buffer = result.buffer;
+        accumulated = result.accumulated;
+        if (result.completed) return;
+      }
+
+      if (done) break;
+    }
+
+    // 버퍼에 남은 마지막 메시지 처리 (trailing \n\n 없는 경우)
+    if (!completed && buffer.trim()) {
+      buffer += "\n\n";
+      const result = processSSEBuffer(buffer, accumulated, onRoastChunk, onComplete);
+      if (result.completed) return;
+      accumulated = result.accumulated;
     }
 
     // 스트림이 끝났는데 done 이벤트를 못 받은 경우 → 수동 파싱 시도
     if (!completed && accumulated) {
-      const cleaned = accumulated.trim()
-        .replace(/^```(?:json)?\n?/, "")
-        .replace(/\n?```$/, "");
-      try {
-        const parsed = JSON.parse(cleaned) as AnalyzeResponse;
-        onComplete(parsed);
-      } catch {
-        // JSON 파싱도 실패하면 roast만이라도 보여줌
+      const tryParse = (s: string) => { try { return JSON.parse(s) as AnalyzeResponse; } catch { return null; } };
+      // 1) 원본 2) 코드블록 제거 3) { } 추출
+      const stripped = accumulated.trim()
+        .replace(/^[\s\S]*?```(?:json)?\s*\n?/i, "")
+        .replace(/\n?\s*```[\s\S]*$/, "");
+      const jsonMatch = accumulated.match(/\{[\s\S]*\}/);
+      const parsed = tryParse(accumulated.trim())
+        || tryParse(stripped)
+        || (jsonMatch ? tryParse(jsonMatch[0]) : null);
+
+      if (parsed) {
+        onComplete(sanitizeResponse(parsed));
+      } else {
         const roast = extractRoastFromPartial(accumulated);
         onComplete({
-          roast: roast || accumulated.slice(0, 500),
+          roast: roast || "분석 결과를 파싱하지 못했습니다. 다시 시도해주세요.",
           analysis: "응답 파싱 실패 — 서버 응답이 불완전합니다.",
           grade: null,
           sector: null,
@@ -101,7 +177,7 @@ export async function analyzePortfolioStream(
       }
     }
   } catch (err) {
-    onError(err as Error);
+    onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
 
@@ -135,47 +211,45 @@ export async function analyzeBitgakStream(
 
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split("\n\n");
-      buffer = parts.pop() ?? "";
-
-      for (const part of parts) {
-        if (!part.startsWith("data: ")) continue;
-        const jsonStr = part.slice(6).trim();
-        if (!jsonStr) continue;
-
-        let msg: Record<string, unknown>;
-        try { msg = JSON.parse(jsonStr); } catch { continue; }
-
-        if (msg.error) throw new Error(msg.error as string);
-
-        if (msg.done && msg.r) {
-          completed = true;
-          onComplete(msg.r as AnalyzeResponse);
-          return;
-        }
-
-        if (msg.t) {
-          accumulated += msg.t as string;
-          const partial = extractRoastFromPartial(accumulated);
-          if (partial !== null) onRoastChunk(partial);
-        }
+      if (value) {
+        buffer += decoder.decode(value, { stream: !done });
       }
+
+      if (buffer.includes("\n\n")) {
+        const result = processSSEBuffer(buffer, accumulated, onRoastChunk, onComplete);
+        buffer = result.buffer;
+        accumulated = result.accumulated;
+        if (result.completed) return;
+      }
+
+      if (done) break;
+    }
+
+    // 버퍼에 남은 마지막 메시지 처리
+    if (!completed && buffer.trim()) {
+      buffer += "\n\n";
+      const result = processSSEBuffer(buffer, accumulated, onRoastChunk, onComplete);
+      if (result.completed) return;
+      accumulated = result.accumulated;
     }
 
     if (!completed && accumulated) {
-      const cleaned = accumulated.trim()
-        .replace(/^```(?:json)?\n?/, "")
-        .replace(/\n?```$/, "");
-      try {
-        const parsed = JSON.parse(cleaned) as AnalyzeResponse;
-        onComplete(parsed);
-      } catch {
+      const tryParse = (s: string) => { try { return JSON.parse(s) as AnalyzeResponse; } catch { return null; } };
+      const stripped = accumulated.trim()
+        .replace(/^[\s\S]*?```(?:json)?\s*\n?/i, "")
+        .replace(/\n?\s*```[\s\S]*$/, "");
+      const jsonMatch = accumulated.match(/\{[\s\S]*\}/);
+      const parsed = tryParse(accumulated.trim())
+        || tryParse(stripped)
+        || (jsonMatch ? tryParse(jsonMatch[0]) : null);
+
+      if (parsed) {
+        onComplete(sanitizeResponse(parsed));
+      } else {
         const roast = extractRoastFromPartial(accumulated);
         onComplete({
-          roast: roast || accumulated.slice(0, 500),
+          roast: roast || "분석 결과를 파싱하지 못했습니다. 다시 시도해주세요.",
           analysis: "응답 파싱 실패",
           grade: null,
           sector: null,
@@ -185,7 +259,7 @@ export async function analyzeBitgakStream(
       }
     }
   } catch (err) {
-    onError(err as Error);
+    onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
 

@@ -33,7 +33,7 @@ export function NicknameModal({ onConfirm, onClose, defaultNickname, defaultStra
         </div>
 
         {/* 닉네임 — 항상 편집 가능 */}
-        <label className="block text-[11px] text-gray-500 font-mono mb-1">
+        <label className="block text-xs text-gray-500 font-mono mb-1">
           닉네임 <span className="text-gray-600">(2–20자)</span>
         </label>
         <input
@@ -48,7 +48,7 @@ export function NicknameModal({ onConfirm, onClose, defaultNickname, defaultStra
         />
 
         {/* 한줄 전략 */}
-        <label className="block text-[11px] text-gray-500 font-mono mb-1">
+        <label className="block text-xs text-gray-500 font-mono mb-1">
           나의 투자 전략 <span className="text-gray-600">(선택 · 20자 이내)</span>
         </label>
         <input

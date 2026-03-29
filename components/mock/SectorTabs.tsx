@@ -38,7 +38,7 @@ export function SectorTabs({ active, onChange }: SectorTabsProps) {
           className={`text-xs font-mono px-3 py-1.5 rounded-md border transition-all whitespace-nowrap ${
             active === s
               ? "bg-kim-red text-white border-kim-red shadow"
-              : "bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-white/10 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-white/30"
+              : "bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-zinc-400 border-gray-200 dark:border-white/10 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-white/30"
           }`}
         >
           {s}

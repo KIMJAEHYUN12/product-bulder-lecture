@@ -41,12 +41,12 @@ export function LoginButton({ user, loading, onSignIn, onSignOut }: LoginButtonP
             <Image
               src={user.photoURL}
               alt={user.displayName ?? ""}
-              width={28}
-              height={28}
+              width={36}
+              height={36}
               className="rounded-full ring-2 ring-white/20"
             />
           ) : (
-            <div className="w-7 h-7 rounded-full bg-kim-red/30 flex items-center justify-center text-xs font-bold text-kim-red">
+            <div className="w-9 h-9 rounded-full bg-kim-red/30 flex items-center justify-center text-sm font-bold text-kim-red">
               {(user.displayName ?? "?")[0]}
             </div>
           )}

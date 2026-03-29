@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Upload, ImageIcon, X } from "lucide-react";
+import { Upload, ImageIcon, X, Camera } from "lucide-react";
 import Image from "next/image";
 
 interface Props {
@@ -18,7 +18,9 @@ export function FileDropZone({ previewUrl, onFile, onClear, mode = "kim" }: Prop
 
   const handleFile = useCallback(
     (file: File) => {
-      if (file.type.startsWith("image/")) onFile(file);
+      // accept="image/*"가 브라우저 레벨에서 필터링하므로
+      // file.type이 빈 문자열인 모바일 브라우저도 허용
+      if (!file.type || file.type.startsWith("image/")) onFile(file);
     },
     [onFile]
   );
@@ -35,14 +37,14 @@ export function FileDropZone({ previewUrl, onFile, onClear, mode = "kim" }: Prop
 
   return (
     <motion.div
-      className={`relative rounded-xl border-2 border-dashed transition-colors cursor-pointer
+      className={`relative rounded-2xl border-2 transition-all cursor-pointer overflow-hidden
         ${isDragging
           ? mode === "makalong"
-            ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
-            : "border-kim-red bg-red-50 dark:bg-red-950/20"
+            ? "border-blue-400 bg-blue-500/15 dark:bg-blue-500/15 shadow-[0_0_30px_rgba(59,130,246,0.35)]"
+            : "border-kim-red bg-red-500/15 dark:bg-red-500/15 shadow-[0_0_30px_rgba(230,57,70,0.35)]"
           : mode === "makalong"
-            ? "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 hover:border-blue-400"
-            : "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 hover:border-kim-gold"
+            ? "border-blue-400/60 dark:border-blue-400/40 bg-gradient-to-b from-blue-50/80 to-white dark:from-blue-500/10 dark:to-gray-900/60 hover:border-blue-400 hover:shadow-[0_0_24px_rgba(59,130,246,0.2)]"
+            : "border-indigo-400/60 dark:border-indigo-400/40 bg-gradient-to-b from-indigo-50/80 to-white dark:from-indigo-500/10 dark:to-gray-900/60 hover:border-indigo-400 hover:shadow-[0_0_24px_rgba(99,102,241,0.2)]"
         }`}
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -88,35 +90,58 @@ export function FileDropZone({ previewUrl, onFile, onClear, mode = "kim" }: Prop
           </div>
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center gap-3 py-12 px-4">
-          <div className={`p-3 rounded-full ${mode === "makalong" ? "bg-blue-500/10" : "bg-kim-gold/10"}`}>
+        <div className="flex flex-col items-center justify-center gap-3 py-10 px-4">
+          <motion.div
+            animate={isDragging ? { scale: 1.15 } : { scale: [1, 1.08, 1] }}
+            transition={isDragging ? { duration: 0.2 } : { duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+            className={`p-5 rounded-2xl ${mode === "makalong"
+              ? "bg-blue-500/20 ring-2 ring-blue-400/30 shadow-[0_0_20px_rgba(59,130,246,0.15)]"
+              : "bg-indigo-500/20 ring-2 ring-indigo-400/30 shadow-[0_0_20px_rgba(99,102,241,0.15)]"}`}
+          >
             {isDragging ? (
-              <ImageIcon size={32} className={mode === "makalong" ? "text-blue-500" : "text-kim-red"} />
+              <ImageIcon size={40} className={mode === "makalong" ? "text-blue-400" : "text-indigo-400"} />
             ) : (
-              <Upload size={32} className={mode === "makalong" ? "text-blue-400" : "text-kim-gold"} />
+              <Camera size={40} className={mode === "makalong" ? "text-blue-400" : "text-indigo-400"} />
             )}
+          </motion.div>
+          <div className="text-center">
+            <p className="text-gray-900 dark:text-white text-base font-black">
+              {mode === "makalong"
+                ? "차트 캡처를 올려주세요"
+                : "포트폴리오 스크린샷을 올려주세요"}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1">
+              {mode === "makalong"
+                ? "주봉 · 일봉 · 분봉 캔들 차트"
+                : "증권앱 보유종목 화면 캡처"}
+            </p>
           </div>
-          <p className="text-gray-600 dark:text-gray-400 text-sm text-center">
+          <motion.span
+            animate={{ boxShadow: [
+              mode === "makalong"
+                ? "0 0 0 0 rgba(59,130,246,0)"
+                : "0 0 0 0 rgba(99,102,241,0)",
+              mode === "makalong"
+                ? "0 0 0 8px rgba(59,130,246,0.15)"
+                : "0 0 0 8px rgba(99,102,241,0.15)",
+              mode === "makalong"
+                ? "0 0 0 0 rgba(59,130,246,0)"
+                : "0 0 0 0 rgba(99,102,241,0)",
+            ]}}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+            className={`px-6 py-3 text-white text-sm font-black rounded-xl transition-colors ${
+              mode === "makalong"
+                ? "bg-blue-500 hover:bg-blue-600 shadow-lg shadow-blue-500/30"
+                : "bg-indigo-500 hover:bg-indigo-600 shadow-lg shadow-indigo-500/30"
+            }`}
+          >
+            클릭하여 파일 선택
+          </motion.span>
+          <p className="text-[10px] text-gray-400 dark:text-zinc-500 text-center font-mono leading-relaxed">
             {mode === "makalong"
-              ? "차트 캡처(주봉·일봉·분봉)를 드래그하거나"
-              : "포트폴리오 스크린샷을 드래그하거나 클릭하세요"}
+              ? "네이버증권 · 트레이딩뷰 · 키움 영웅문 차트 권장"
+              : "종목명 · 수량 · 수익률이 보이면 정확도 UP"}
           </p>
-          <span className={`px-4 py-2 text-white text-sm rounded-lg transition-colors ${
-            mode === "makalong" ? "bg-blue-500/90 hover:bg-blue-500" : "bg-kim-gold/90 hover:bg-kim-gold"
-          }`}>
-            파일 선택
-          </span>
-          {mode === "makalong" ? (
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center mt-1 font-mono leading-relaxed">
-              권장: 네이버증권 · 트레이딩뷰 · 키움 영웅문 차트<br />
-              캔들 차트 + 거래량 포함 캡처 시 정확도 UP
-            </p>
-          ) : (
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center mt-1 font-mono leading-relaxed">
-              증권앱 보유종목 화면을 캡처해서 올려주세요<br />
-              종목명 · 수량 · 수익률이 보이면 정확도 UP
-            </p>
-          )}
         </div>
       )}
     </motion.div>

@@ -68,6 +68,8 @@ let sessionLow = Infinity;
 let lastPrice = 0;
 let lastVolume = 0;
 let lastBarDate = "";
+let prevClose = 0;       // 정규장 종가 (Firestore에서 로드)
+let isFirstPoll = true;  // 첫 폴링은 세션 전체 데이터 요청
 
 // 1분봉 히스토리 (key: "YYYYMMDD HH:mm:ss", value: bar)
 const sessionBars = new Map();
@@ -75,14 +77,53 @@ const sessionBars = new Map();
 // 현재 폴링 응답용
 let currentBars = [];
 
+// ── 세션 시작(18:00)부터 현재까지 경과 시간 계산 ─────────────────────────────
+function getSessionDurationStr() {
+  const now = new Date();
+  const h = now.getHours();
+
+  const sessionStart = new Date(now);
+  if (h >= 18) {
+    sessionStart.setHours(18, 0, 0, 0);
+  } else {
+    // 자정 이후 → 전일 18:00 기준
+    sessionStart.setDate(sessionStart.getDate() - 1);
+    sessionStart.setHours(18, 0, 0, 0);
+  }
+
+  const durationSec = Math.floor((now - sessionStart) / 1000);
+  const clamped = Math.max(300, Math.min(durationSec, 43200));
+  return `${clamped} S`;
+}
+
+// ── Firestore에서 정규장 종가 로드 ───────────────────────────────────────────
+async function loadPrevClose() {
+  try {
+    const doc = await db.doc("config/kospi_futures_cache").get();
+    if (doc.exists) {
+      const data = doc.data();
+      if (data?.data?.price) {
+        prevClose = data.data.price;
+        console.log(`[prevClose] 정규장 종가 로드: ${prevClose}`);
+        return;
+      }
+    }
+    console.log("[prevClose] 정규장 데이터 없음 — sessionOpen으로 대체 예정");
+  } catch (e) {
+    console.error("[prevClose] 로드 실패:", e.message);
+  }
+}
+
 // ── Firestore 저장 ──────────────────────────────────────────────────────────
 async function saveToFirestore() {
   if (lastPrice <= 0) return;
   if (lastPrice === savedPrice) return;
 
-  const change = sessionOpen > 0 ? +(lastPrice - sessionOpen).toFixed(2) : 0;
-  const changePct = sessionOpen > 0
-    ? +((change / sessionOpen) * 100).toFixed(2)
+  // 변동 기준: 정규장 종가(prevClose) 우선, 없으면 세션 시가
+  const basePrice = prevClose > 0 ? prevClose : sessionOpen;
+  const change = basePrice > 0 ? +(lastPrice - basePrice).toFixed(2) : 0;
+  const changePct = basePrice > 0
+    ? +((change / basePrice) * 100).toFixed(2)
     : 0;
 
   // sessionBars → 정렬된 배열 (최대 720개)
@@ -99,7 +140,7 @@ async function saveToFirestore() {
     open: sessionOpen,
     high: sessionHigh,
     low: sessionLow === Infinity ? lastPrice : sessionLow,
-    prevClose: sessionOpen,
+    prevClose: prevClose > 0 ? prevClose : sessionOpen,
     volume: lastVolume,
     bid: 0,
     ask: 0,
@@ -122,16 +163,35 @@ async function saveToFirestore() {
   }
 }
 
+// ── 야간 세션 시간인지 확인 (18:00~06:00) ────────────────────────────────────
+function isNightSessionTime() {
+  const h = new Date().getHours();
+  return h >= 18 || h < 6;
+}
+
 // ── 폴링 1회 실행 ───────────────────────────────────────────────────────────
 function poll() {
+  // 18시 전이면 폴링 스킵 (어젯밤 데이터 방지)
+  if (!isNightSessionTime()) {
+    console.log(`[스킵] 야간 세션 시간 아님 (18:00~06:00 대기 중)`);
+    return;
+  }
+
   reqId++;
   currentBars = [];
+
+  // 첫 폴링: 세션 시작(18:00)부터 전체 데이터 요청 → 늦게 켜도 복구
+  // 이후 폴링: 최근 1시간 (30초 간격이니 충분)
+  const duration = isFirstPoll ? getSessionDurationStr() : "3600 S";
+  if (isFirstPoll) {
+    console.log(`[첫 폴링] 세션 시작부터 전체 요청: ${duration}`);
+  }
 
   ib.reqHistoricalData(
     reqId,
     contract,
     "",           // endDateTime (현재)
-    "3600 S",     // 최근 1시간
+    duration,     // 첫 폴링: 세션 전체, 이후: 최근 1시간
     "1 min",      // 1분봉
     "TRADES",
     0,            // useRTH=0 (야간 포함)
@@ -141,9 +201,12 @@ function poll() {
 }
 
 // ── 시작 ──────────────────────────────────────────────────────────────────────
-function start() {
+async function start() {
   console.log("=== IB K200 야간선물 수집기 시작 ===");
   console.log(`모드: reqHistoricalData 폴링 (${POLL_INTERVAL / 1000}초 간격)\n`);
+
+  // 정규장 종가 로드 (변동 계산 기준)
+  await loadPrevClose();
 
   contract = {
     symbol: "K200",
@@ -159,7 +222,7 @@ function start() {
     console.log("[연결] IB Gateway 연결 성공");
     console.log("[폴링] 30초마다 최신 데이터 요청 시작...\n");
 
-    // 첫 폴링
+    // 첫 폴링 (세션 시작부터 전체 데이터 요청)
     poll();
 
     // 이후 30초마다 반복
@@ -176,9 +239,16 @@ function start() {
       if (currentBars.length > 0) {
         const latest = currentBars[currentBars.length - 1];
 
-        // 세션 시가 (첫 폴링의 첫 바)
+        if (isFirstPoll) {
+          console.log(`[첫 폴링 완료] ${currentBars.length}봉 수신 (세션 전체)`);
+          isFirstPoll = false;
+        }
+
+        // 세션 시가: 전체 바 중 가장 이른 시간의 시가 (늦게 켜도 정확)
         if (sessionOpen === 0) {
-          sessionOpen = currentBars[0].open;
+          const earliest = currentBars.reduce((a, b) => (a.date < b.date ? a : b));
+          sessionOpen = earliest.open;
+          console.log(`[세션 시가] ${sessionOpen} (${earliest.date})`);
         }
 
         // currentBars → sessionBars 병합 (중복 제거)
@@ -220,11 +290,11 @@ function start() {
 
   ib.on(EventName.disconnected, () => {
     console.log("[연결 끊김] 폴링 중지, 10초 후 재연결...");
+    console.log(`  세션 데이터 보존: ${sessionBars.size}봉, open=${sessionOpen}`);
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    sessionOpen = 0;
-    sessionHigh = 0;
-    sessionLow = Infinity;
-    sessionBars.clear();
+    // 재연결 시 세션 데이터 보존 (bars, open, high, low 유지)
+    // 첫 폴링으로 빠진 구간 보충
+    isFirstPoll = true;
     setTimeout(() => {
       console.log("[재연결] 시도...");
       ib.connect();

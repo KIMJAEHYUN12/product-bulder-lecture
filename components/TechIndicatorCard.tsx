@@ -32,7 +32,7 @@ export function TechIndicatorCard({ indicators }: Props) {
   const maInfo = getMaAlignment(ma5, ma20, ma60);
 
   return (
-    <div className="glass-card rounded-xl p-4">
+    <div className="glass-card rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-base">📊</span>
         <h3 className="text-sm font-black text-gray-900 dark:text-white">기술지표 요약</h3>
@@ -54,9 +54,9 @@ export function TechIndicatorCard({ indicators }: Props) {
             />
           </div>
           <div className="flex justify-between mt-1">
-            <span className="text-[9px] text-blue-400 font-mono">30</span>
-            <span className={`text-[9px] font-mono ${getRsiColor(rsi)}`}>{getRsiLabel(rsi)}</span>
-            <span className="text-[9px] text-red-400 font-mono">70</span>
+            <span className="text-[10px] text-blue-400 font-mono">30</span>
+            <span className={`text-[10px] font-mono ${getRsiColor(rsi)}`}>{getRsiLabel(rsi)}</span>
+            <span className="text-[10px] text-red-400 font-mono">70</span>
           </div>
         </div>
 
@@ -68,12 +68,12 @@ export function TechIndicatorCard({ indicators }: Props) {
               {macd.trend === "bullish" ? "골든크로스" : "데드크로스"}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-[10px] font-mono text-gray-500 dark:text-gray-400">
+          <div className="flex items-center gap-2 text-[10px] font-mono text-gray-500 dark:text-zinc-400">
             <span>MACD: {macd.macd}</span>
             <span>Signal: {macd.signal}</span>
           </div>
           <div className="flex items-center gap-1 mt-1">
-            <span className="text-[9px] text-gray-400 font-mono">히스토그램:</span>
+            <span className="text-[10px] text-gray-400 font-mono">히스토그램:</span>
             <span className={`text-[10px] font-bold ${macd.histogram > 0 ? "text-red-500" : "text-blue-500"}`}>
               {macd.histogram > 0 ? "+" : ""}{macd.histogram}
             </span>
@@ -90,7 +90,7 @@ export function TechIndicatorCard({ indicators }: Props) {
               {bb.position === "above" ? "상단 이탈" : bb.position === "below" ? "하단 이탈" : "밴드 내"}
             </span>
           </div>
-          <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400 space-y-0.5">
+          <div className="text-[10px] font-mono text-gray-500 dark:text-zinc-400 space-y-0.5">
             <div className="flex justify-between">
               <span>상단</span><span className="text-red-400">{bb.upper.toLocaleString()}</span>
             </div>
@@ -109,7 +109,7 @@ export function TechIndicatorCard({ indicators }: Props) {
             <span className="text-[10px] text-gray-500 font-mono">이동평균</span>
             <span className={`text-[10px] font-bold ${maInfo.color}`}>{maInfo.label}</span>
           </div>
-          <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400 space-y-0.5">
+          <div className="text-[10px] font-mono text-gray-500 dark:text-zinc-400 space-y-0.5">
             <div className="flex justify-between">
               <span className="text-amber-400">MA5</span><span>{ma5.toLocaleString()}</span>
             </div>

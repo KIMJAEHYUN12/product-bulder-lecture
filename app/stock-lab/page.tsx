@@ -6,7 +6,11 @@ import { ComparisonChart } from "@/components/stock-lab/ComparisonChart";
 import { ComparisonCards } from "@/components/stock-lab/ComparisonCards";
 import { AiBriefing } from "@/components/stock-lab/AiBriefing";
 import { BottomTabs } from "@/components/stock-lab/BottomTabs";
+import { AdSlot } from "@/components/AdSlot";
+import CrossNavigation from "@/components/CrossNavigation";
+import { LoginButton } from "@/components/mock/LoginButton";
 import { useStockLab } from "@/hooks/useStockLab";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function StockLabPage() {
   const {
@@ -17,26 +21,31 @@ export default function StockLabPage() {
     requestBriefing,
     loadInvestorTrend,
     loadSectorComparison,
+    loadSignalScan,
     getIndustry,
   } = useStockLab();
+  const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth();
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="max-w-[1200px] mx-auto px-4 py-6">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Link
-            href="/"
-            className="text-gray-500 hover:text-white transition-colors text-sm"
-          >
-            ← 홈
-          </Link>
-          <h1 className="text-xl font-black">
-            🔬 <span className="text-blue-400">종목 분석실</span>
-          </h1>
-          <span className="text-[10px] text-gray-500 font-mono hidden sm:inline">
-            최대 3종목 비교 · AI 브리핑 · 뉴스
-          </span>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="text-gray-500 hover:text-white transition-colors text-sm"
+            >
+              ← 홈
+            </Link>
+            <h1 className="text-xl font-black">
+              🔬 <span className="text-blue-400">종목 분석실</span>
+            </h1>
+            <span className="text-[10px] text-gray-500 font-mono hidden sm:inline">
+              최대 3종목 비교 · AI 브리핑 · 뉴스
+            </span>
+          </div>
+          <LoginButton user={user} loading={authLoading} onSignIn={signInWithGoogle} onSignOut={signOut} />
         </div>
 
         {/* 검색 바 — z-20으로 그리드 콘텐츠 위에 배치 */}
@@ -90,14 +99,23 @@ export default function StockLabPage() {
               isLoadingInvestor={state.isLoadingInvestor}
               isLoadingSector={state.isLoadingSector}
               getIndustry={getIndustry}
+              signalData={state.signalData}
+              isLoadingSignal={state.isLoadingSignal}
               onLoadInvestor={loadInvestorTrend}
               onLoadSector={loadSectorComparison}
+              onLoadSignal={loadSignalScan}
+              onSelectStock={(symbol, name) => addStock({ symbol, name })}
             />
           </div>
         </div>
 
+        {/* 광고 */}
+        <AdSlot className="mt-6" />
+
+        <CrossNavigation currentPath="/stock-lab" />
+
         {/* 면책조항 */}
-        <div className="mt-8 pt-4 border-t border-white/10 text-center">
+        <div className="mt-4 pt-4 border-t border-white/10 text-center">
           <p className="text-[10px] text-gray-500 font-mono leading-relaxed max-w-xl mx-auto">
             본 서비스는 정보 제공 목적이며 투자 권유·추천이 아닙니다. AI 분석 결과는 참고용이며, 투자 판단과 그에 따른 손익의 책임은 전적으로 이용자 본인에게 있습니다.
           </p>

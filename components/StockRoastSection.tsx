@@ -2,6 +2,7 @@
 
 import { useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Search } from "lucide-react";
 import { useStockRoast } from "@/hooks/useStockRoast";
 
 export function StockRoastSection() {
@@ -35,7 +36,7 @@ export function StockRoastSection() {
     const newsText = result.news.slice(0, 3).map((n) => `- ${n.title}`).join("\n");
     const text =
       `[오비젼] ${selected.name} 관련 뉴스\n\n${newsText}\n\n` +
-      `👉 https://mylen-24263782-5d205.web.app`;
+      `👉 https://bitgak.co.kr`;
 
     if (navigator.share) {
       navigator.share({ text }).catch(() => {});
@@ -47,7 +48,7 @@ export function StockRoastSection() {
   const showDropdown = suggestions.length > 0;
 
   return (
-    <div className="glass-card rounded-xl p-4 relative z-20 overflow-visible">
+    <div className="glass-card rounded-2xl p-5 relative z-20 overflow-visible">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-base">🔍</span>
         <h3 className="text-sm font-black text-gray-900 dark:text-white">종목 뉴스</h3>
@@ -57,6 +58,7 @@ export function StockRoastSection() {
       {/* 검색창 */}
       <div className="relative z-50" ref={dropdownRef}>
         <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-kim-red/70" />
           <input
             type="text"
             value={query}
@@ -67,13 +69,19 @@ export function StockRoastSection() {
                 setQuery(e.target.value);
               }
             }}
-            placeholder="종목명 검색 (예: 삼성전자, SK하이닉스)"
-            className="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 text-sm font-mono text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:border-kim-red/50 focus:ring-1 focus:ring-kim-red/30 transition-colors pr-8"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && suggestions.length > 0) {
+                e.preventDefault();
+                selectStock(suggestions[0]);
+              }
+            }}
+            placeholder="종목명을 입력하세요"
+            className="w-full pl-9 pr-8 py-3 rounded-xl bg-white dark:bg-white/[0.07] border-2 border-kim-red/30 dark:border-kim-red/25 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-kim-red/60 focus:ring-2 focus:ring-kim-red/20 focus:shadow-[0_0_16px_rgba(230,57,70,0.12)] transition-all"
           />
           {selected && (
             <button
               onClick={reset}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white text-sm"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white text-sm"
             >
               ✕
             </button>
@@ -149,7 +157,7 @@ export function StockRoastSection() {
                   >
                     <div className="flex items-start gap-2">
                       <span className="text-gray-300 dark:text-gray-600 shrink-0 mt-0.5 text-xs group-hover:text-kim-red transition-colors">▸</span>
-                      <span className="text-xs text-gray-700 dark:text-gray-300 font-mono leading-relaxed line-clamp-2 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                      <span className="text-xs text-gray-700 dark:text-zinc-300 font-mono leading-relaxed line-clamp-2 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                         {item.title}
                       </span>
                     </div>
@@ -166,13 +174,13 @@ export function StockRoastSection() {
             <div className="flex gap-2 mt-3">
               <button
                 onClick={handleShare}
-                className="flex-1 py-2 rounded-lg bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 text-xs font-bold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/20 transition-colors"
+                className="flex-1 py-2 rounded-lg bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 text-xs font-bold text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/20 transition-colors"
               >
                 공유
               </button>
               <button
                 onClick={reset}
-                className="flex-1 py-2 rounded-lg bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 text-xs font-bold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/20 transition-colors"
+                className="flex-1 py-2 rounded-lg bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 text-xs font-bold text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/20 transition-colors"
               >
                 다른 종목
               </button>

@@ -1,112 +1,268 @@
-export type InvestorTypeKey = "aggressive" | "analytical" | "stable" | "momentum";
+export type InvestorTypeKey =
+  | "visionary"
+  | "dealmaker"
+  | "sage"
+  | "strategist"
+  | "hunter"
+  | "observer"
+  | "contrarian"
+  | "explorer";
 
 export interface InvestorType {
   key: InvestorTypeKey;
   emoji: string;
+  image: string;
+  character: string;
   name: string;
+  subtitle: string;
   description: string;
   traits: string[];
   strengths: string[];
   warnings: string[];
+  assets: string[];
   kimComment: string;
 }
 
 export const INVESTOR_TYPES: Record<InvestorTypeKey, InvestorType> = {
-  aggressive: {
-    key: "aggressive",
-    emoji: "⚡",
-    name: "공격형 트레이더",
-    description: "단기 수익 극대화에 최적화된 스피드형 투자자. 확신이 생기면 과감하게 베팅하고, 손절도 빠르다. 시장의 변동성을 두려워하지 않고 오히려 기회로 활용한다.",
+  visionary: {
+    key: "visionary",
+    emoji: "🚀",
+    image: "/investors/visionary.png",
+    character: "일론머스터드",
+    name: "화성행 티켓을 쥔 혁신가",
+    subtitle: "미래에 투자하는 대담한 선구자",
+    description:
+      "10년 후를 보고 오늘 베팅하는 파괴적 혁신의 신봉자. 남들이 '미쳤다'고 할 때 확신을 갖고 올인하며, 기존 산업을 뒤집을 기술과 비전에 투자한다. 단기 변동성 따위는 화성 가는 길의 작은 흔들림일 뿐.",
     traits: [
-      "빠른 진입·퇴출 — 타이밍이 전부",
-      "집중 투자 선호 — 한 종목에 몰빵도 가능",
-      "변동성을 기회로 인식",
-      "손절 원칙 철저, 미련 없음",
-      "장중 실시간 모니터링 습관",
+      "파괴적 혁신 기업에 장기 올인",
+      "남들이 이해 못하는 미래 기술에 베팅",
+      "단기 손실에도 흔들리지 않는 확신",
+      "전기차·우주·AI 등 미래 산업 집중",
+      "실패해도 비전이 맞으면 추가 매수",
     ],
     strengths: [
-      "시장 기회를 빠르게 포착",
-      "수익 극대화 가능성 높음",
-      "감정에 치우치지 않는 빠른 손절",
+      "시대를 앞서가는 투자 안목",
+      "확신에 기반한 장기 보유 능력",
+      "혁신 산업의 초기 수혜 가능성",
     ],
     warnings: [
-      "과도한 거래 비용 누적 주의",
-      "확신 과잉으로 인한 무리한 베팅",
-      "단기 노이즈에 흔들릴 가능성",
+      "과도한 집중 투자로 리스크 극대화",
+      "비전과 망상의 경계가 모호할 수 있음",
+      "현금흐름 없는 기업에 장기 묶일 위험",
     ],
-    kimComment: "타이밍은 좋은데, 그 자신감이 데이터 기반인지 감 기반인지부터 따져봐. 둘의 차이가 수익률 차이임.",
+    assets: ["테슬라", "우주항공 ETF", "AI/로봇 ETF", "비트코인"],
+    kimComment:
+      "비전은 멋진데, 화성 가기 전에 지구에서 밥은 먹고 살아야지. 확신과 고집은 한 끗 차이야.",
   },
-  analytical: {
-    key: "analytical",
-    emoji: "🔬",
-    name: "냉철한 분석가",
-    description: "숫자와 논리로만 움직이는 가치 투자자. 재무제표를 직접 뜯어보고, 싸게 사서 제값 받을 때까지 기다리는 인내심이 강점이다. 모르는 곳엔 절대 투자하지 않는다.",
+  dealmaker: {
+    key: "dealmaker",
+    emoji: "🏛️",
+    image: "/investors/dealmaker.png",
+    character: "맥도널드 트럼펫",
+    name: "승부를 거는 딜메이커",
+    subtitle: "레버리지와 협상의 달인",
+    description:
+      "투자도 비즈니스처럼 접근하는 거래의 기술자. 실물 자산과 브랜드 가치를 중시하고, 레버리지를 무기 삼아 큰 판을 벌인다. 남들이 겁먹을 때 과감하게 딜을 성사시키는 배짱이 핵심.",
     traits: [
-      "재무제표·PER·PBR 등 정량 지표 중시",
-      "저평가 종목 발굴이 핵심",
-      "장기 보유 — 최소 6개월~수년",
-      "투자 전 철저한 리서치 필수",
-      "실적 발표·공시 분석 습관",
+      "실물 자산(부동산·금) 중심 포트폴리오",
+      "레버리지를 전략적으로 활용",
+      "브랜드 파워와 독점적 가치 중시",
+      "위기를 저가 매수 기회로 활용",
+      "협상과 거래 구조에 강한 관심",
     ],
     strengths: [
-      "근거 있는 투자로 성공 확률 높음",
+      "실물 자산 기반의 안정적 수익",
+      "레버리지 활용으로 수익 극대화",
+      "위기 상황에서의 과감한 의사결정",
+    ],
+    warnings: [
+      "레버리지 과다 시 큰 손실 가능",
+      "자신감 과잉으로 리스크 과소평가",
+      "유동성 부족 시 실물 자산 처분 어려움",
+    ],
+    assets: ["리츠(REITs)", "금", "고배당주", "부동산 ETF"],
+    kimComment:
+      "딜은 잘 치는데 레버리지가 양날의 검인 거 알지? 빚으로 번 돈은 빚으로 날아갈 수도 있어.",
+  },
+  sage: {
+    key: "sage",
+    emoji: "🦉",
+    image: "/investors/sage.png",
+    character: "왓더 버핏",
+    name: "시간을 이기는 현인",
+    subtitle: "복리와 인내의 철학자",
+    description:
+      "좋은 기업을 적정 가격에 사서 영원히 보유하는 가치 투자의 정석. 기업의 경제적 해자(moat)를 꿰뚫어 보고, 시간이 만드는 복리의 마법을 믿는다. 시장이 공포에 떨 때가 바로 매수 타이밍.",
+    traits: [
+      "경제적 해자(moat) 있는 기업만 선별",
+      "적정 가격 이하에서만 매수 (안전마진)",
+      "보유 기간은 영원이 기본",
+      "시장 공포 = 매수 기회",
+      "단순하지만 흔들리지 않는 원칙",
+    ],
+    strengths: [
       "장기 복리 효과 극대화",
-      "심리적 흔들림 없는 안정감",
+      "심리적으로 가장 안정적인 투자",
+      "검증된 우량 기업 중심의 안정성",
     ],
     warnings: [
-      "분석에 너무 오래 걸려 기회를 놓치는 '분석 마비'",
-      "시장 심리·수급 무시로 단기 손실 감내 필요",
-      "저평가 종목이 영원히 저평가일 수도 있음",
+      "성장 기회를 놓칠 수 있음",
+      "가치 함정(value trap)에 빠질 위험",
+      "시장 변화에 대한 적응이 느릴 수 있음",
     ],
-    kimComment: "분석력은 인정. 근데 실행 안 하면 그냥 공부하는 거임. 아는 것과 버는 것은 다른 얘기야.",
+    assets: ["S&P500 ETF", "삼성전자", "코카콜라", "배당성장 ETF"],
+    kimComment:
+      "인내심은 인정인데, 세상이 너무 빨리 변하잖아. 해자가 메워지는 속도도 체크해야지.",
   },
-  stable: {
-    key: "stable",
-    emoji: "🛡️",
-    name: "안정형 투자자",
-    description: "잃지 않는 투자를 최우선으로 하는 수비형 플레이어. 화려한 수익보다 꾸준한 복리를 선호하며, ETF·우량주 중심의 분산 투자로 리스크를 최소화한다.",
+  strategist: {
+    key: "strategist",
+    emoji: "⚙️",
+    image: "/investors/strategist.png",
+    character: "레이 걸어요",
+    name: "시스템을 설계하는 전략가",
+    subtitle: "원칙과 분산의 설계자",
+    description:
+      "감정이 아닌 시스템으로 투자하는 원칙주의자. 모든 시나리오에 대비한 올웨더 포트폴리오를 구축하고, 리밸런싱 규칙을 철저히 따른다. 어떤 시장 환경에서도 살아남는 것이 최우선 목표.",
     traits: [
-      "리스크 관리가 수익보다 우선",
-      "ETF·우량주·배당주 중심",
-      "10개 이상 분산 투자 선호",
-      "적립식 투자 — 꾸준함이 무기",
-      "레버리지·파생 절대 사용 안 함",
+      "자산 배분 원칙을 시스템화",
+      "주식·채권·원자재·금 글로벌 분산",
+      "정기 리밸런싱 규칙 철저히 준수",
+      "감정 배제, 데이터 기반 의사결정",
+      "최악의 시나리오에도 대비하는 설계",
     ],
     strengths: [
-      "심리적 안정감 — 시장 폭락에도 동요 없음",
-      "장기 복리의 안정적 수혜",
-      "투자 시간 절약 — 삶과 균형 유지",
+      "어떤 시장에서도 방어 가능한 안정성",
+      "감정에 흔들리지 않는 일관된 실행",
+      "장기적으로 변동성 대비 우수한 성과",
     ],
     warnings: [
-      "인플레이션 대비 실질 수익률 낮을 수 있음",
-      "큰 기회가 와도 과감하게 베팅 못함",
-      "분산 과다로 집중 수익 불가능",
+      "상승장에서 수익률이 상대적으로 낮음",
+      "시스템 과신으로 예외 상황 대응 부족",
+      "지나친 분산으로 집중 수익 불가",
     ],
-    kimComment: "안전하긴 한데 이 정도면 그냥 예금 넣지. S&P500이라도 꾸준히 사면 시장 평균은 따라가겠지만, 그게 목표야?",
+    assets: ["올웨더 포트폴리오", "채권 ETF", "원자재 ETF", "글로벌 분산 ETF"],
+    kimComment:
+      "시스템은 완벽한데 시장이 시스템대로 안 움직이면? 원칙도 좋지만 유연함도 필요해.",
   },
-  momentum: {
-    key: "momentum",
-    emoji: "🎯",
-    name: "테마 사냥꾼",
-    description: "시장 흐름과 뉴스를 읽는 모멘텀 투자자. 트렌드에 올라타는 타이밍이 생명이며, 핫한 섹터를 빠르게 파악하고 관련주를 선점하는 데 특화되어 있다.",
+  hunter: {
+    key: "hunter",
+    emoji: "🦅",
+    image: "/investors/hunter.png",
+    character: "조지 쏘아스",
+    name: "시장의 빈틈을 노리는 사냥꾼",
+    subtitle: "거시경제를 읽는 승부사",
+    description:
+      "거시 경제의 흐름을 읽고 시장의 구조적 불균형을 파고드는 매크로 투자자. 평소에는 인내하다가 확신이 생기면 한 방에 크게 베팅한다. 시장의 재귀성을 이해하고 군중 심리의 반대편에 선다.",
     traits: [
-      "테마·섹터 로테이션 전문",
-      "뉴스·정책·수급에 민감하게 반응",
-      "트렌드 선점 — 남들보다 한 발 앞서",
-      "매일 시장 이슈 모니터링",
-      "어닝 서프라이즈·수주 공시 주목",
+      "거시 경제 지표를 항상 추적",
+      "시장의 구조적 불균형을 포착",
+      "확신이 있을 때만 크게 베팅",
+      "통화·금리·정책 변화에 민감",
+      "군중 심리의 반대편에서 기회 포착",
     ],
     strengths: [
-      "트렌드 적중 시 단기 고수익 가능",
-      "시장 흐름 읽는 직관이 뛰어남",
-      "섹터 로테이션으로 리스크 분산",
+      "거시 흐름 적중 시 폭발적 수익",
+      "시장 구조를 꿰뚫는 통찰력",
+      "위기를 기회로 전환하는 능력",
     ],
     warnings: [
-      "뉴스 후행 진입으로 이미 늦은 경우 다반사",
-      "테마 소멸 후 고점 물림 위험",
-      "잦은 매매로 수수료 비용 누적",
+      "타이밍 실패 시 큰 손실 가능",
+      "거시 분석이 틀릴 수도 있음",
+      "집중 베팅의 리스크가 매우 높음",
     ],
-    kimComment: "뉴스 보고 사면 이미 늦은 거 알고 있냐? 테마주는 선점이 전부야. 1등이 아니면 폭탄 돌리기임.",
+    assets: ["외환", "신흥국 ETF", "원유 선물 ETF", "매크로 전략 펀드"],
+    kimComment:
+      "빈틈을 잘 찾는데, 그게 진짜 빈틈인지 함정인지 구분이 중요해. 사냥감이 되지 않도록.",
+  },
+  observer: {
+    key: "observer",
+    emoji: "🔍",
+    image: "/investors/observer.png",
+    character: "파티 런치",
+    name: "일상에서 보석을 캐는 관찰자",
+    subtitle: "아는 것에만 투자하는 현실주의자",
+    description:
+      "마트에서, 거리에서, 일상 속에서 투자 아이디어를 발견하는 생활 밀착형 투자자. '내가 아는 것에 투자한다'는 원칙으로 이해할 수 있는 기업에만 집중하며, 성장하는 기업을 합리적 가격에 사는 것을 추구한다.",
+    traits: [
+      "일상에서 소비 트렌드 변화를 포착",
+      "이해 가능한 비즈니스 모델에만 투자",
+      "PEG 비율로 성장 대비 가격 평가",
+      "직접 발로 뛰어 기업을 조사",
+      "숨은 보석 같은 중소형주 발굴",
+    ],
+    strengths: [
+      "누구나 실천 가능한 투자 방법",
+      "기업 이해도가 높아 리스크 관리 용이",
+      "조기 발굴 시 높은 수익 가능",
+    ],
+    warnings: [
+      "관찰 범위가 경험에 한정될 수 있음",
+      "감각과 데이터의 괴리 발생 가능",
+      "소형주 유동성 리스크",
+    ],
+    assets: ["소비재 ETF", "유통/리테일", "일상 브랜드 대형주", "중소형 성장주"],
+    kimComment:
+      "관찰력은 좋은데, 마트에서 잘 팔린다고 주가도 오르는 건 아니야. 숫자도 같이 봐.",
+  },
+  contrarian: {
+    key: "contrarian",
+    emoji: "🐻",
+    image: "/investors/contrarian.png",
+    character: "마이클 뿌리",
+    name: "세상과 반대로 가는 역발상가",
+    subtitle: "위기 속에서 기회를 찾는 독행자",
+    description:
+      "모두가 사고 싶을 때 팔고, 모두가 도망칠 때 산다. 시장의 광기와 공포를 이용해 극단적 저평가 자산을 발굴하며, 깊은 리서치와 소신으로 세상과 반대 방향에 베팅하는 역발상 투자자.",
+    traits: [
+      "군중 심리의 정반대로 행동",
+      "극단적 저평가 자산을 깊이 리서치",
+      "위기 상황에서 과감하게 매수",
+      "시장의 과열/버블 신호를 주시",
+      "소신 있게 장기간 반대 포지션 유지",
+    ],
+    strengths: [
+      "버블 붕괴 시 큰 수익 가능",
+      "남들이 못 보는 가치를 발견하는 눈",
+      "시장 과열에 대한 경각심",
+    ],
+    warnings: [
+      "시장이 비이성적 상태를 오래 유지할 수 있음",
+      "너무 이른 진입으로 장기 손실 가능",
+      "주변의 반대 의견에 외로운 싸움",
+    ],
+    assets: ["가치주 ETF", "경기방어주", "인버스 ETF", "침체 수혜 섹터"],
+    kimComment:
+      "역발상은 좋은데, '시장이 틀렸다'와 '내가 틀렸다'의 차이를 아는 게 핵심이야.",
+  },
+  explorer: {
+    key: "explorer",
+    emoji: "🧭",
+    image: "/investors/explorer.png",
+    character: "캐시 옹드",
+    name: "미래를 선점하는 탐험가",
+    subtitle: "파괴적 혁신 테마의 선구자",
+    description:
+      "아직 시장이 주목하지 않는 파괴적 혁신 테마를 먼저 발굴하고 선점하는 테마 투자 전문가. 높은 확신으로 미래 성장 산업에 집중 투자하며, 단기 변동성보다 5년 후의 세상을 그리며 투자한다.",
+    traits: [
+      "파괴적 혁신 테마 선점 투자",
+      "2차전지·바이오·핀테크 등 신산업 집중",
+      "높은 확신으로 성장주에 집중 투자",
+      "기술 트렌드 리포트를 꼼꼼히 분석",
+      "5년 후 세상을 그리며 포트폴리오 구성",
+    ],
+    strengths: [
+      "성장 산업 초기 진입으로 높은 수익 가능",
+      "트렌드 변화를 빠르게 읽는 감각",
+      "테마별 분산으로 리스크 조절",
+    ],
+    warnings: [
+      "테마 소멸 시 큰 손실 가능",
+      "실적 없는 기업에 과도한 기대",
+      "높은 변동성에 심리적 부담",
+    ],
+    assets: ["2차전지 ETF", "바이오 ETF", "핀테크", "ARK 스타일 테마 ETF"],
+    kimComment:
+      "탐험은 좋은데, 지도 없이 가면 조난당해. 테마 열풍과 진짜 혁신을 구분하는 눈이 필요해.",
   },
 };
 
@@ -116,149 +272,204 @@ export interface QuizQuestion {
 }
 
 export const QUIZ_QUESTIONS: QuizQuestion[] = [
+  // ── 1. 투자 시나리오 (급등/급락/폭락) ──
   {
-    q: "보유 종목이 하루 만에 +15% 급등했습니다. 어떻게 하시겠습니까?",
+    q: "보유 종목이 하루 만에 +20% 급등했습니다. 어떻게 하시겠습니까?",
     options: [
-      { label: "즉시 전량 매도, 수익 확정", type: "aggressive" },
-      { label: "고평가 여부 분석 후 부분 매도", type: "analytical" },
-      { label: "장기 목표 유지, 그냥 보유", type: "stable" },
-      { label: "뉴스 확인 후 추가 매수도 고려", type: "momentum" },
+      { label: "비전이 맞았으니 그대로 보유, 화성까지 간다", type: "visionary" },
+      { label: "수익 일부로 레버리지 추가 투자", type: "dealmaker" },
+      { label: "좋은 기업이면 그냥 보유, 흔들리지 않는다", type: "sage" },
+      { label: "시스템 규칙에 따라 리밸런싱", type: "strategist" },
     ],
   },
   {
-    q: "보유 종목이 -10% 하락했습니다. 당신의 선택은?",
+    q: "보유 종목이 -15% 하락했습니다. 당신의 선택은?",
     options: [
-      { label: "바로 손절, 다음 종목으로", type: "aggressive" },
-      { label: "펀더멘털 점검 후 추가 매수", type: "analytical" },
-      { label: "분할 매수로 평단가 낮춤", type: "stable" },
-      { label: "섹터 전반 문제면 다른 테마로 이동", type: "momentum" },
+      { label: "거시 분석 결과 추세 전환이면 전량 매도", type: "hunter" },
+      { label: "내가 이해하는 기업이니 추가 매수", type: "observer" },
+      { label: "오히려 공포에 사야 할 때, 과감히 줍줍", type: "contrarian" },
+      { label: "테마 자체가 살아있으면 분할 매수", type: "explorer" },
     ],
   },
   {
-    q: "투자 판단 시 가장 많이 참고하는 것은?",
+    q: "시장이 갑자기 -8% 폭락했습니다. 당신의 반응은?",
     options: [
-      { label: "최근 주가 흐름과 거래량", type: "aggressive" },
-      { label: "재무제표, PER, PBR 등 기본 지표", type: "analytical" },
-      { label: "ETF 비중, 시장 전체 흐름", type: "stable" },
-      { label: "뉴스, 정책, 테마 동향", type: "momentum" },
+      { label: "레버리지 반등 매매 기회!", type: "dealmaker" },
+      { label: "이런 날이 바로 매수 기회, 현금 투입", type: "sage" },
+      { label: "공포 지수 급등 = 최고의 매수 타이밍", type: "contrarian" },
+      { label: "포트폴리오 비중 재점검 후 규칙대로 대응", type: "strategist" },
     ],
   },
   {
-    q: "한 종목에 최대 얼마까지 집중 투자할 수 있습니까?",
+    q: "투자한 종목이 3개월째 횡보 중입니다. 어떻게 합니까?",
     options: [
-      { label: "50% 이상도 가능, 확신 있으면", type: "aggressive" },
-      { label: "30% 이하, 집중하되 적당히", type: "analytical" },
-      { label: "20% 이하, 항상 분산", type: "stable" },
-      { label: "상황마다 다름, 테마 따라 결정", type: "momentum" },
+      { label: "혁신 기업이면 3년도 기다릴 수 있다", type: "visionary" },
+      { label: "거시 환경 변화가 없으면 유지", type: "hunter" },
+      { label: "일상에서 이 기업 제품이 잘 팔리는지 확인", type: "observer" },
+      { label: "테마 모멘텀이 살아있는지 체크 후 결정", type: "explorer" },
+    ],
+  },
+  // ── 2. 정보 소스 & 의사결정 ──
+  {
+    q: "투자 판단 시 가장 중요하게 보는 것은?",
+    options: [
+      { label: "기술 혁신성과 CEO의 비전", type: "visionary" },
+      { label: "재무제표와 경제적 해자(moat)", type: "sage" },
+      { label: "금리·환율·통화정책 등 거시 지표", type: "hunter" },
+      { label: "산업 리포트와 기술 트렌드 분석", type: "explorer" },
     ],
   },
   {
-    q: "시장이 갑자기 -5% 폭락했습니다. 당신의 반응은?",
+    q: "새로운 종목에 투자하기 전, 당신의 조사 방식은?",
     options: [
-      { label: "지금이 기회! 단기 반등 노리고 즉시 매수", type: "aggressive" },
-      { label: "보유 종목 펀더멘털 재점검", type: "analytical" },
-      { label: "장기 관점에서 이 정도는 노이즈", type: "stable" },
-      { label: "어떤 섹터가 빠졌는지, 반등 테마 파악", type: "momentum" },
+      { label: "자산 배분 모델에 맞는지 시뮬레이션 돌려봄", type: "strategist" },
+      { label: "그 기업 제품을 직접 써보고 주변 반응 확인", type: "observer" },
+      { label: "시장 컨센서스와 반대 논리가 있는지 탐색", type: "contrarian" },
+      { label: "실물 자산 가치와 현금흐름 분석", type: "dealmaker" },
     ],
   },
   {
-    q: "새로운 종목에 투자하기 전, 얼마나 조사합니까?",
+    q: "친구가 특정 종목을 강력 추천합니다. 당신의 반응은?",
     options: [
-      { label: "당일~1일, 차트 보고 바로 결정", type: "aggressive" },
-      { label: "1~2주 이상, 재무제표 직접 분석", type: "analytical" },
-      { label: "ETF라면 별도 조사 거의 없음", type: "stable" },
-      { label: "테마 파악되면 빠르게 진입", type: "momentum" },
+      { label: "그 기업이 세상을 바꿀 수 있는지만 본다", type: "visionary" },
+      { label: "모두가 좋다고 하면 오히려 경계한다", type: "contrarian" },
+      { label: "관련 섹터의 성장 가능성을 리서치", type: "explorer" },
+      { label: "해자가 있는 기업인지 재무제표부터 확인", type: "sage" },
     ],
   },
+  // ── 3. 리스크 & 손절 ──
   {
     q: "당신의 손절 기준은?",
     options: [
-      { label: "-5~10% 내외, 빠른 손절이 원칙", type: "aggressive" },
-      { label: "펀더멘털 훼손 없으면 손절 안 함", type: "analytical" },
-      { label: "-15% 이하면 손절, 분산으로 타격 최소화", type: "stable" },
-      { label: "테마가 끝났다 판단되면 즉시 손절", type: "momentum" },
-    ],
-  },
-  {
-    q: "배당주 vs 성장주, 당신의 선택은?",
-    options: [
-      { label: "성장주, 배당은 너무 느림", type: "aggressive" },
-      { label: "저평가 배당주 (가치+배당 조합)", type: "analytical" },
-      { label: "고배당 ETF, 안정적 현금흐름", type: "stable" },
-      { label: "성장 테마주, 배당보단 상승 차익", type: "momentum" },
-    ],
-  },
-  {
-    q: "투자 관련 정보를 얼마나 자주 확인합니까?",
-    options: [
-      { label: "하루 여러 번, 실시간 모니터링", type: "aggressive" },
-      { label: "주 1~2회, 주요 공시·리포트 위주", type: "analytical" },
-      { label: "월 1~2회면 충분", type: "stable" },
-      { label: "매일 확인, 핫한 이슈 놓치면 안 됨", type: "momentum" },
-    ],
-  },
-  {
-    q: "투자로 큰 손실이 났을 때 당신의 반응은?",
-    options: [
-      { label: "빠르게 손절하고 다음 기회를 찾음", type: "aggressive" },
-      { label: "왜 틀렸는지 철저히 분석하고 복기", type: "analytical" },
-      { label: "분산 덕분에 큰 타격 없음, 그냥 기다림", type: "stable" },
-      { label: "테마 판단 실수 인정, 빠르게 전환", type: "momentum" },
-    ],
-  },
-  {
-    q: "연간 목표 수익률은?",
-    options: [
-      { label: "30% 이상, 그 이하면 의미 없음", type: "aggressive" },
-      { label: "10~20%, 시장 대비 알파 추구", type: "analytical" },
-      { label: "5~10%, 안정적으로", type: "stable" },
-      { label: "테마 적중 시 50% 이상도 가능", type: "momentum" },
+      { label: "비전이 유효하면 손절 안 함, 오히려 추가 매수", type: "visionary" },
+      { label: "거시 환경이 바뀌면 즉시 전량 매도", type: "hunter" },
+      { label: "시스템에 미리 설정한 룰에 따라 자동 실행", type: "strategist" },
+      { label: "테마가 끝났다 판단되면 빠르게 전환", type: "explorer" },
     ],
   },
   {
     q: "레버리지 ETF나 파생상품, 활용합니까?",
     options: [
-      { label: "확신 있을 때 레버리지 적극 활용", type: "aggressive" },
-      { label: "리스크 계산 후 소량만 활용", type: "analytical" },
-      { label: "절대 사용 안 함", type: "stable" },
-      { label: "상승 테마에 단기 레버리지 활용", type: "momentum" },
+      { label: "레버리지는 나의 무기, 확신 있을 때 적극 활용", type: "dealmaker" },
+      { label: "리스크 계산 후 포트폴리오의 일부로만 편입", type: "strategist" },
+      { label: "인버스/풋옵션으로 하락에 베팅하기도 한다", type: "contrarian" },
+      { label: "절대 사용 안 함, 원금 보전이 우선", type: "sage" },
     ],
   },
   {
-    q: "친구가 특정 종목을 강력 추천했습니다.",
+    q: "포트폴리오에 손실 종목이 있는데 뉴스에서 악재가 터졌습니다.",
     options: [
-      { label: "차트 보고 괜찮으면 즉시 매수", type: "aggressive" },
-      { label: "재무제표부터 직접 뜯어봄", type: "analytical" },
-      { label: "내 포트폴리오 전략과 맞지 않으면 패스", type: "stable" },
-      { label: "해당 섹터 테마 파악 후 관련주 검토", type: "momentum" },
+      { label: "기업 해자가 건재하면 악재는 노이즈일 뿐", type: "sage" },
+      { label: "군중이 패닉할 때 역으로 줍는다", type: "contrarian" },
+      { label: "매장이나 서비스를 직접 가서 확인해본다", type: "observer" },
+      { label: "거시 흐름과 연결된 악재인지 분석", type: "hunter" },
+    ],
+  },
+  // ── 4. 자산 배분 & 시간 ──
+  {
+    q: "이상적인 투자 기간은?",
+    options: [
+      { label: "10년 이상, 미래 산업이 현실이 될 때까지", type: "visionary" },
+      { label: "5~10년, 복리가 마법을 부릴 때까지", type: "sage" },
+      { label: "사이클에 따라 유동적, 수개월~수년", type: "hunter" },
+      { label: "테마 성장기에 집중, 2~5년", type: "explorer" },
     ],
   },
   {
-    q: "투자에서 가장 중요한 것은 무엇이라고 생각합니까?",
+    q: "1억 원이 생겼습니다. 어떻게 투자하시겠습니까?",
     options: [
-      { label: "타이밍과 실행 속도", type: "aggressive" },
-      { label: "기업의 본질적 가치", type: "analytical" },
-      { label: "자본 보전과 리스크 관리", type: "stable" },
-      { label: "시장 흐름과 수급 파악", type: "momentum" },
+      { label: "부동산·리츠에 레버리지 끼고 투자", type: "dealmaker" },
+      { label: "주식·채권·금·원자재 4등분 분산", type: "strategist" },
+      { label: "내가 자주 가는 가게의 상장 기업에 투자", type: "observer" },
+      { label: "2차전지·AI·바이오 성장 테마에 분배", type: "explorer" },
+    ],
+  },
+  {
+    q: "투자 관련 정보를 얼마나 자주 확인합니까?",
+    options: [
+      { label: "분기 1회, 리밸런싱 때만 확인하면 충분", type: "strategist" },
+      { label: "매일 경제 뉴스·거시 지표 모니터링", type: "hunter" },
+      { label: "마트·거리에서 항상 트렌드를 관찰 중", type: "observer" },
+      { label: "혁신 기업 뉴스는 실시간으로 챙겨봄", type: "visionary" },
+    ],
+  },
+  // ── 5. 투자 철학 & 가치관 ──
+  {
+    q: "투자에서 가장 중요한 것은?",
+    options: [
+      { label: "미래를 바꿀 비전과 혁신", type: "visionary" },
+      { label: "실물 가치와 현금흐름", type: "dealmaker" },
+      { label: "기업의 본질적 가치와 안전마진", type: "sage" },
+      { label: "원칙과 시스템에 따른 일관된 실행", type: "strategist" },
     ],
   },
   {
     q: "주식 투자를 한마디로 표현한다면?",
     options: [
-      { label: "전쟁. 빠른 자가 이긴다", type: "aggressive" },
-      { label: "공부. 아는 만큼 번다", type: "analytical" },
-      { label: "마라톤. 꾸준함이 답이다", type: "stable" },
-      { label: "서핑. 파도를 잘 타야 한다", type: "momentum" },
+      { label: "전쟁. 거시 흐름을 읽고 크게 승부하는 것", type: "hunter" },
+      { label: "보물찾기. 일상 속에서 숨은 보석을 캐는 것", type: "observer" },
+      { label: "역주행. 남들과 반대로 가야 큰돈을 번다", type: "contrarian" },
+      { label: "탐험. 아직 아무도 가지 않은 길을 개척하는 것", type: "explorer" },
+    ],
+  },
+  {
+    q: "가장 존경하는 투자 철학은?",
+    options: [
+      { label: "기업의 해자를 찾아 영원히 보유하라", type: "sage" },
+      { label: "모든 시나리오에 대비하는 시스템을 만들어라", type: "strategist" },
+      { label: "남들이 탐욕스러울 때 두려워하라", type: "contrarian" },
+      { label: "아는 것에 투자하고, 모르면 공부하라", type: "observer" },
+    ],
+  },
+  {
+    q: "연간 목표 수익률은?",
+    options: [
+      { label: "100%+, 혁신 기업은 10배도 가능", type: "visionary" },
+      { label: "20~30%, 레버리지 활용하면 충분히", type: "dealmaker" },
+      { label: "10~15%, 시장 수익률만 꾸준히 이기면 충분", type: "sage" },
+      { label: "시장 상황별로 다름, 수익률보다 리스크 관리", type: "strategist" },
+    ],
+  },
+  // ── 6. 재미 가상 시나리오 ──
+  {
+    q: "타임머신이 있다면 어떤 투자를 하시겠습니까?",
+    options: [
+      { label: "2010년에 테슬라 IPO 올인", type: "visionary" },
+      { label: "2008년 금융위기 직전에 풋옵션 매수", type: "contrarian" },
+      { label: "1990년대 맨해튼 부동산 매입", type: "dealmaker" },
+      { label: "2000년에 아마존 사서 아직까지 보유", type: "sage" },
+    ],
+  },
+  {
+    q: "무인도에 딱 하나의 투자 도구만 가져갈 수 있다면?",
+    options: [
+      { label: "글로벌 거시 경제 대시보드", type: "hunter" },
+      { label: "소비자 트렌드 리포트", type: "observer" },
+      { label: "자동 리밸런싱 시스템", type: "strategist" },
+      { label: "미래 기술 트렌드 보고서", type: "explorer" },
+    ],
+  },
+  {
+    q: "투자 세계에서 당신의 별명은?",
+    options: [
+      { label: "미래에서 온 사람 — 남들보다 10년 앞서 생각", type: "visionary" },
+      { label: "부동산 황제 — 실물로 제국을 건설", type: "dealmaker" },
+      { label: "공포의 매수자 — 시장이 울 때 웃는다", type: "contrarian" },
+      { label: "테마 사냥꾼 — 다음 빅 트렌드를 먼저 발견", type: "explorer" },
     ],
   },
 ];
 
 export function calcInvestorType(answers: InvestorTypeKey[]): InvestorType {
   const scores: Record<InvestorTypeKey, number> = {
-    aggressive: 0,
-    analytical: 0,
-    stable: 0,
-    momentum: 0,
+    visionary: 0,
+    dealmaker: 0,
+    sage: 0,
+    strategist: 0,
+    hunter: 0,
+    observer: 0,
+    contrarian: 0,
+    explorer: 0,
   };
   answers.forEach((a) => scores[a]++);
   const topKey = (Object.keys(scores) as InvestorTypeKey[]).reduce((a, b) =>

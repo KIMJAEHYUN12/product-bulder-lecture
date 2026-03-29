@@ -38,7 +38,7 @@ export interface MarketData {
   isLoading: boolean;
 }
 
-const FIREBASE_HOST = "https://mylen-24263782-5d205.web.app";
+const FIREBASE_HOST = "https://bitgak.co.kr";
 const MARKET_URL =
   process.env.NEXT_PUBLIC_MARKET_API_URL ||
   `${FIREBASE_HOST}/api/market`;

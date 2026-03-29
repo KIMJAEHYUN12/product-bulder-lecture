@@ -1,5 +1,6 @@
 "use client";
 
+import { ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   RadarChart,
@@ -12,6 +13,47 @@ import {
 import { TrendingUp, ShieldAlert, BarChart2, Layers, Target } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { PortfolioScores, Sector } from "@/types";
+
+/* ── 텍스트 포맷팅 헬퍼 ── */
+
+const NUM_RE = /[+-]?\d[\d,.~]*%|\([+-]?\d[\d,.]*[만억천원$/\w]*\)|\$\d[\d,.]*[/\w]*|[+-]\d[\d,.]*[만억천원]+/g;
+
+function highlightNumbers(text: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let k = 0;
+  NUM_RE.lastIndex = 0;
+  while ((m = NUM_RE.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    const s = m[0];
+    const neg = s.startsWith("-") || s.startsWith("(-");
+    const pos = s.startsWith("+") || s.startsWith("(+");
+    const cls = neg
+      ? "text-red-500 dark:text-red-400 font-bold"
+      : pos
+        ? "text-emerald-600 dark:text-emerald-400 font-bold"
+        : "font-bold text-gray-900 dark:text-white";
+    parts.push(<span key={k++} className={cls}>{s}</span>);
+    last = m.index + s.length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length > 0 ? parts : [text];
+}
+
+function splitParagraphs(text: string): string[] {
+  if (text.includes("\n")) return text.split(/\n+/).filter((s) => s.trim());
+  if (text.length < 80) return [text];
+  const safe = text.replace(/\.\.\./g, "\u2026");
+  const sentences = safe.split(/(?<=[.?!])\s+/).map((s) => s.replace(/\u2026/g, "..."));
+  if (sentences.length <= 2) return [text];
+  const result: string[] = [];
+  for (let i = 0; i < sentences.length; i += 2) {
+    const g = sentences.slice(i, Math.min(i + 2, sentences.length)).join(" ");
+    if (g.trim()) result.push(g.trim());
+  }
+  return result;
+}
 
 type ScoreMeta = {
   key: keyof PortfolioScores;
@@ -42,42 +84,42 @@ const SECTOR_META: Record<
 > = {
   이차전지: {
     emoji: "⚡",
-    badge: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
+    badge: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30 ring-1 ring-yellow-400/20",
     label: "이차전지",
   },
   반도체: {
     emoji: "💾",
-    badge: "text-blue-400 bg-blue-400/10 border-blue-400/30",
+    badge: "text-blue-400 bg-blue-400/10 border-blue-400/30 ring-1 ring-blue-400/20",
     label: "반도체",
   },
   전력: {
     emoji: "🔌",
-    badge: "text-orange-400 bg-orange-400/10 border-orange-400/30",
+    badge: "text-orange-400 bg-orange-400/10 border-orange-400/30 ring-1 ring-orange-400/20",
     label: "전력/에너지",
   },
   AI: {
     emoji: "🧠",
-    badge: "text-purple-400 bg-purple-400/10 border-purple-400/30",
+    badge: "text-purple-400 bg-purple-400/10 border-purple-400/30 ring-1 ring-purple-400/20",
     label: "AI/IT",
   },
   바이오: {
     emoji: "🧬",
-    badge: "text-green-400 bg-green-400/10 border-green-400/30",
+    badge: "text-green-400 bg-green-400/10 border-green-400/30 ring-1 ring-green-400/20",
     label: "바이오",
   },
   자동차: {
     emoji: "⚙️",
-    badge: "text-gray-300 bg-gray-300/10 border-gray-300/30",
+    badge: "text-gray-300 bg-gray-300/10 border-gray-300/30 ring-1 ring-gray-300/20",
     label: "자동차",
   },
   혼합: {
     emoji: "📊",
-    badge: "text-indigo-400 bg-indigo-400/10 border-indigo-400/30",
+    badge: "text-indigo-400 bg-indigo-400/10 border-indigo-400/30 ring-1 ring-indigo-400/20",
     label: "혼합 포트폴리오",
   },
   기타: {
     emoji: "📊",
-    badge: "text-gray-400 bg-gray-400/10 border-gray-400/30",
+    badge: "text-gray-400 bg-gray-400/10 border-gray-400/30 ring-1 ring-gray-400/20",
     label: "기타",
   },
 };
@@ -98,26 +140,36 @@ interface Props {
   scores: PortfolioScores | null;
   sector: Sector | null;
   mode?: "kim" | "makalong";
+  roast?: string | null;
 }
 
-export function AnalysisReport({ analysis, scores, sector, mode = "kim" }: Props) {
+export function AnalysisReport({ analysis, scores, sector, mode = "kim", roast }: Props) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme !== "light";
   const isMcr = mode === "makalong";
   const SCORE_META = isMcr ? SCORE_META_MCR : SCORE_META_KIM;
+  const safeScore = (v: unknown): number => {
+    if (typeof v === "number" && !isNaN(v)) return v;
+    const n = Number(v);
+    return isNaN(n) ? 0 : n;
+  };
+
   const radarData = scores
     ? SCORE_META.map(({ shortLabel, key }) => ({
         subject: shortLabel,
-        value: scores[key],
+        value: safeScore(scores[key]),
         fullMark: 100,
       }))
     : [];
 
   const sectorMeta = sector ? (SECTOR_META[sector] ?? SECTOR_META["기타"]) : null;
 
+  const isMcrMode = isMcr;
+  const displayText = analysis || (isMcrMode ? roast : null);
+
   return (
     <AnimatePresence>
-      {(analysis || scores) && (
+      {(displayText || scores) && (
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -199,7 +251,7 @@ export function AnalysisReport({ analysis, scores, sector, mode = "kim" }: Props
               {/* Score bars */}
               <div className="space-y-2 mt-1">
                 {SCORE_META.map(({ key, label, icon: Icon }) => {
-                  const v = scores[key];
+                  const v = safeScore(scores[key]);
                   return (
                     <div key={key} className="flex items-center gap-2">
                       <Icon size={12} className="text-gray-600 shrink-0" />
@@ -231,19 +283,23 @@ export function AnalysisReport({ analysis, scores, sector, mode = "kim" }: Props
           )}
 
           {/* Divider */}
-          {scores && analysis && (
+          {scores && displayText && (
             <div className="mx-5 border-t border-dashed border-gray-200 dark:border-white/10 my-3" />
           )}
 
           {/* Analysis text */}
-          {analysis && (
+          {displayText && (
             <div className="relative px-5 pb-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
                 {isMcr ? "빗각 상세 분석" : "전문가 소견"}
               </p>
-              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap font-mono">
-                {analysis}
-              </p>
+              <div className="space-y-2.5">
+                {splitParagraphs(displayText).map((p, i) => (
+                  <p key={i} className="text-[13px] text-gray-700 dark:text-zinc-300 leading-[1.9]">
+                    {highlightNumbers(p)}
+                  </p>
+                ))}
+              </div>
             </div>
           )}
         </motion.div>

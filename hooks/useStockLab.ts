@@ -7,11 +7,13 @@ import { fetchStockRoast } from "@/lib/stockRoastApi";
 import { streamStockBriefing } from "@/lib/stockBriefingApi";
 import { fetchInvestorTrend } from "@/lib/investorTrendApi";
 import { findSectorPeers, getIndustry, type StockSearchResult } from "@/lib/stockSearchApi";
+import { fetchSignalScan } from "@/lib/signalScanApi";
 import type {
   StockChartResponse,
   StockNewsItem,
   StockBriefingResponse,
   InvestorTrendData,
+  SignalScanResponse,
   ChartRange,
   Candle,
 } from "@/types";
@@ -36,6 +38,8 @@ export interface StockLabState {
   sectorPriceMap: Record<string, StockPrice>;
   isLoadingInvestor: boolean;
   isLoadingSector: boolean;
+  signalData: SignalScanResponse | null;
+  isLoadingSignal: boolean;
   error: string | null;
 }
 
@@ -69,6 +73,8 @@ export function useStockLab() {
     sectorPriceMap: {},
     isLoadingInvestor: false,
     isLoadingSector: false,
+    signalData: null,
+    isLoadingSignal: false,
     error: null,
   });
 
@@ -241,6 +247,20 @@ export function useStockLab() {
     }
   }, []);
 
+  const loadSignalScan = useCallback(async () => {
+    setState((prev) => ({ ...prev, isLoadingSignal: true, error: null }));
+    try {
+      const data = await fetchSignalScan();
+      setState((prev) => ({ ...prev, signalData: data, isLoadingSignal: false }));
+    } catch (err) {
+      setState((prev) => ({
+        ...prev,
+        isLoadingSignal: false,
+        error: err instanceof Error ? err.message : "신호 스캔 실패",
+      }));
+    }
+  }, []);
+
   const loadSectorComparison = useCallback(async (symbol: string) => {
     if (stateRef.current.sectorPeers[symbol]) return;
     setState((prev) => ({ ...prev, isLoadingSector: true }));
@@ -279,6 +299,7 @@ export function useStockLab() {
     requestBriefing,
     loadInvestorTrend,
     loadSectorComparison,
+    loadSignalScan,
     getIndustry,
   };
 }

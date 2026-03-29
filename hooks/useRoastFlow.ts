@@ -46,11 +46,13 @@ export function useRoastFlow() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
+      if (!dataUrl) return;
       const base64 = dataUrl.split(",")[1];
+      if (!base64) return;
       setState((prev) => ({
         ...prev,
         imageBase64: base64,
-        mimeType: file.type,
+        mimeType: file.type || "image/jpeg",
         previewUrl: dataUrl,
         roast: null,
         analysis: null,
@@ -60,6 +62,12 @@ export function useRoastFlow() {
         grade: null,
         isStreaming: false,
         kimExpression: "neutral",
+      }));
+    };
+    reader.onerror = () => {
+      setState((prev) => ({
+        ...prev,
+        error: "이미지를 읽을 수 없습니다. 다시 시도해주세요.",
       }));
     };
     reader.readAsDataURL(file);

@@ -44,7 +44,7 @@ export function WebViewBanner() {
         <p className="text-xs font-bold text-amber-300">
           {info.isKakao ? "카카오톡 브라우저" : "인앱 브라우저"} — Google 로그인 불가
         </p>
-        <p className="text-[11px] text-amber-200/70 font-mono mt-0.5">
+        <p className="text-xs text-amber-200/70 font-mono mt-0.5">
           {info.isAndroid
             ? <>우측 상단 <span className="text-white">⋯</span> → 다른 브라우저로 열기</>
             : <>하단 공유 버튼(↑) → Safari로 열기</>}
@@ -52,7 +52,7 @@ export function WebViewBanner() {
         {info.isAndroid && (
           <a
             href={chromeUrl}
-            className="inline-block mt-1.5 px-3 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[11px] font-bold hover:bg-amber-500/30 transition-colors"
+            className="inline-block mt-1.5 px-3 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-200 text-xs font-bold hover:bg-amber-500/30 transition-colors"
           >
             Chrome으로 열기
           </a>

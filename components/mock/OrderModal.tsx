@@ -128,7 +128,7 @@ export function OrderModal({
               <button
                 key={ratio}
                 onClick={() => setQty(Math.max(1, Math.floor(max * ratio)))}
-                className="flex-1 text-[11px] font-mono py-1 rounded bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/10 transition-colors"
+                className="flex-1 text-xs font-mono py-1 rounded bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/10 transition-colors"
               >
                 {ratio === 1 ? "최대" : `${ratio * 100}%`}
               </button>
