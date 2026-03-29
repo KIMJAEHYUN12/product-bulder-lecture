@@ -110,8 +110,10 @@ function extractRecentMovements(candles) {
     const prev = recent[i - 1];
     const curr = recent[i];
     const changePct = ((curr.close - prev.close) / prev.close) * 100;
-    const d = new Date(curr.time * 1000 || curr.time);
-    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+    // time이 초 단위 Unix timestamp인지 밀리초인지 판별
+    const ts = curr.time > 1e12 ? curr.time : curr.time * 1000;
+    const d = new Date(ts);
+    const dateStr = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 
     if (Math.abs(changePct) >= 3) {
       movements.push({
@@ -125,6 +127,20 @@ function extractRecentMovements(candles) {
   }
 
   return movements;
+}
+
+// ── 수급 날짜 포맷 (YYYYMMDD → YYYY년 M월 D일) ────────────
+
+function formatSupplyDate(dateStr) {
+  if (!dateStr) return '';
+  const s = String(dateStr);
+  if (s.length === 8) {
+    const y = s.slice(0, 4);
+    const m = parseInt(s.slice(4, 6), 10);
+    const d = parseInt(s.slice(6, 8), 10);
+    return `${y}년 ${m}월 ${d}일`;
+  }
+  return s;
 }
 
 // ── 유저 프롬프트 빌드 ───────────────────────────────────
@@ -193,21 +209,29 @@ function buildUserPrompt(data, dart, images) {
   // 수급 데이터
   if (data.supply?.summary) {
     const s = data.supply.summary;
-    sections.push('\n## 수급 데이터 (최근 15거래일)');
+
+    // 수급 데이터의 실제 날짜 범위 표시 (recentDays는 최신→오래된 순)
+    const newestDate = s.recentDays?.[0]?.date;
+    const oldestDate = s.recentDays?.[s.recentDays.length - 1]?.date;
+    const dateRange = oldestDate && newestDate
+      ? ` (${formatSupplyDate(oldestDate)} ~ ${formatSupplyDate(newestDate)})`
+      : '';
+    sections.push(`\n## 수급 데이터${dateRange}`);
     sections.push(`외국인 순매수: ${s.foreignNet15d?.toLocaleString()}주`);
     sections.push(`기관 순매수: ${s.institutionNet15d?.toLocaleString()}주`);
     sections.push(`개인 순매수: ${s.individualNet15d?.toLocaleString()}주`);
     sections.push(`외인 연속 ${s.foreignStreak > 0 ? '매수' : '매도'}: ${Math.abs(s.foreignStreak)}일`);
 
     if (s.recentDays?.length) {
-      sections.push('\n### 일별 매매동향 (최근 15일)');
+      sections.push('\n### 일별 매매동향');
       sections.push('| 날짜 | 종가 | 등락률 | 외국인 | 기관 | 개인 | 외인보유율 |');
       sections.push('|------|------|--------|--------|------|------|-----------|');
       for (const d of s.recentDays) {
         sections.push(
-          `| ${d.date} | ${d.close?.toLocaleString()} | ${d.changePct?.toFixed(2)}% | ${d.foreign?.toLocaleString()} | ${d.institution?.toLocaleString()} | ${d.individual?.toLocaleString()} | ${d.foreignRate?.toFixed(2)}% |`
+          `| ${formatSupplyDate(d.date)} | ${d.close?.toLocaleString()} | ${d.changePct?.toFixed(2)}% | ${d.foreign?.toLocaleString()} | ${d.institution?.toLocaleString()} | ${d.individual?.toLocaleString()} | ${d.foreignRate?.toFixed(2)}% |`
         );
       }
+      sections.push('→ 위 날짜를 그대로 사용할 것. 다른 날짜로 바꾸지 마라.');
     }
   }
 
@@ -229,17 +253,14 @@ function buildUserPrompt(data, dart, images) {
     sections.push('⚠️ 밸류에이션 데이터 없음 — 이 종목은 PER/PBR 분석 섹션을 생략할 것. 데이터 없이 지어내지 마라.');
   }
 
-  // DART 공시
-  if (dart && dart.hits?.length > 0) {
+  // DART 공시 — summary가 있는 히트만 포함 (null이면 제외)
+  const validHits = dart?.hits?.filter(h => h.summary) || [];
+  if (validHits.length > 0) {
     sections.push('\n## DART 공시 — 히트 항목 (반드시 본문에 반영할 것)');
-    for (const hit of dart.hits) {
+    for (const hit of validHits) {
       sections.push(`\n### [${hit.type}] ${hit.report_nm} (${hit.rcept_dt})`);
       sections.push(`URL: ${hit.url}`);
-      if (hit.summary) {
-        sections.push(`상세 데이터:\n${hit.summary}`);
-      } else {
-        sections.push('상세 데이터: 구조화 API 조회 불가 — 공시 제목과 날짜만 참고하여 작성');
-      }
+      sections.push(`상세 데이터:\n${hit.summary}`);
       sections.push(`→ 이 공시를 본문 "4단계 — 공시/리스크"에서 긍정/부정 양면 해석할 것`);
     }
     if (dart.clean?.length > 0) {

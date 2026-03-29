@@ -152,9 +152,10 @@ function summarizeSupply(investor) {
   if (!investor?.daily?.length) return null;
 
   const daily = investor.daily;
-  const recent15 = daily.slice(0, 15);
+  // daily는 오름차순(오래된→최신) — 최근 15일은 끝에서 가져옴
+  const recent15 = daily.slice(-15);
 
-  // 최근 15일 누적 — API 필드: foreign, institution, individual
+  // 최근 15일 누적
   let foreignNet = 0, instNet = 0, indivNet = 0;
   for (const d of recent15) {
     foreignNet += d.foreign || 0;
@@ -162,23 +163,27 @@ function summarizeSupply(investor) {
     indivNet += d.individual || 0;
   }
 
-  // 외인 연속 매수/매도 일수
+  // 외인 연속 매수/매도 일수 — 최신일부터 역순 카운트
   let foreignStreak = 0;
   if (daily.length > 0) {
-    const dir = (daily[0].foreign || 0) >= 0 ? 1 : -1;
-    for (const d of daily) {
-      if (((d.foreign || 0) >= 0 ? 1 : -1) === dir) foreignStreak++;
+    const lastIdx = daily.length - 1;
+    const dir = (daily[lastIdx].foreign || 0) >= 0 ? 1 : -1;
+    for (let i = lastIdx; i >= 0; i--) {
+      if (((daily[i].foreign || 0) >= 0 ? 1 : -1) === dir) foreignStreak++;
       else break;
     }
     foreignStreak *= dir;
   }
+
+  // 최신일이 위에 오도록 역순
+  const recentDesc = [...recent15].reverse();
 
   return {
     foreignNet15d: foreignNet,
     institutionNet15d: instNet,
     individualNet15d: indivNet,
     foreignStreak,
-    recentDays: recent15.map(d => ({
+    recentDays: recentDesc.map(d => ({
       date: d.date,
       close: d.close,
       changePct: d.changeRate ?? d.changePct,
