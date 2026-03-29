@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { getStockName } from '../../../lib/utils/stock-codes';
 import { fetchStockData } from '../../../lib/data-fetcher';
-import { captureSimplyStock, captureDartHits } from '../../../lib/screenshot';
+import { captureSimplyStock } from '../../../lib/screenshot';
 import { checkDisclosures } from '../../../lib/dart-checker';
 import { generateBlog } from '../../../lib/blog-writer';
 
@@ -69,21 +69,7 @@ export async function POST(request) {
             send({ type: 'step_progress', step: 3, message: msg });
           });
 
-          // DART 히트 공시 캡처 (실패해도 무시 — dart.json 데이터만 있으면 OK)
-          if (dartResult.hits.length > 0) {
-            try {
-              send({ type: 'step_progress', step: 3, message: `히트 ${dartResult.hits.length}건 캡처 시도...` });
-              dartResult.hits = await captureDartHits(dartResult.hits, outputDir, (msg) => {
-                send({ type: 'step_progress', step: 3, message: msg });
-              });
-              for (const hit of dartResult.hits) {
-                if (hit.screenshot) images.push(hit.screenshot);
-              }
-              send({ type: 'images', files: images });
-            } catch (captureErr) {
-              send({ type: 'step_progress', step: 3, message: `DART 캡처 스킵 (${captureErr.message})` });
-            }
-          }
+          // DART 캡처 비활성화 — 데이터(summary)만 사용, 스크린샷 생성하지 않음
 
           // dart.json 저장
           fs.writeFileSync(
