@@ -13,7 +13,8 @@ const INITIAL_STEPS = [
   { id: 1, label: 'Firebase 데이터 추출', status: 'pending', detail: '' },
   { id: 2, label: '스크린샷 캡처', status: 'pending', detail: '' },
   { id: 3, label: 'DART 공시 체크', status: 'pending', detail: '' },
-  { id: 4, label: '블로그 글 생성', status: 'pending', detail: '' },
+  { id: 4, label: '재무제표 조회', status: 'pending', detail: '' },
+  { id: 5, label: '블로그 글 생성', status: 'pending', detail: '' },
 ];
 
 export default function Home() {

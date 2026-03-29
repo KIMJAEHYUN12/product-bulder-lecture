@@ -145,7 +145,7 @@ function formatSupplyDate(dateStr) {
 
 // ── 유저 프롬프트 빌드 ───────────────────────────────────
 
-function buildUserPrompt(data, dart, images) {
+function buildUserPrompt(data, dart, finance, images) {
   const sections = [];
 
   // 오늘 날짜
@@ -253,6 +253,17 @@ function buildUserPrompt(data, dart, images) {
     sections.push('⚠️ 밸류에이션 데이터 없음 — 이 종목은 PER/PBR 분석 섹션을 생략할 것. 데이터 없이 지어내지 마라.');
   }
 
+  // 재무제표 데이터
+  if (finance?.quarters?.length > 0) {
+    sections.push('\n## 재무제표 데이터 (DART 전자공시)');
+    sections.push(finance.summary);
+    sections.push('→ 이 재무 데이터를 본문 "5단계 — 재무 분석"에서 반드시 사용할 것');
+    sections.push('→ 금액은 억원 단위로 표시, 전년 동기 대비 YoY 변화율 포함');
+  } else {
+    sections.push('\n## 재무제표 데이터');
+    sections.push('재무제표 데이터 없음 — 재무 분석 섹션을 생략할 것.');
+  }
+
   // DART 공시 — summary가 있는 히트 + 배당은 summary null이어도 포함
   const validHits = dart?.hits?.filter(h => h.summary || h.type === '배당') || [];
   if (validHits.length > 0) {
@@ -265,7 +276,7 @@ function buildUserPrompt(data, dart, images) {
       } else if (hit.type === '배당') {
         sections.push(`상세 데이터:\n[배당] ${hit.report_nm} (${hit.rcept_dt}) — 상세 수치는 확인 불가, 배당 공시 존재. 공시/리스크 섹션에서 배당 정책 간략히 언급할 것.`);
       }
-      sections.push(`→ 이 공시를 본문 "4단계 — 공시/리스크"에서 긍정/부정 양면 해석할 것`);
+      sections.push(`→ 이 공시를 본문 "5단계 — 공시/리스크"에서 긍정/부정 양면 해석할 것`);
     }
     if (dart.clean?.length > 0) {
       sections.push(`\n클린 항목 (특이사항 없음): ${dart.clean.join(', ')}`);
@@ -307,18 +318,19 @@ function buildUserPrompt(data, dart, images) {
  * 블로그 마크다운 생성
  * @param {object} data - fetchStockData 결과
  * @param {object} dart - checkDisclosures 결과
+ * @param {object|null} finance - fetchFinanceData 결과
  * @param {string[]} images - 이미지 파일 목록
  * @param {'sonnet'|'opus'} mode - 모델 선택
  * @param {(msg: string) => void} onProgress
  * @returns {Promise<string>} 마크다운 텍스트
  */
-async function generateBlog(data, dart, images, mode = 'sonnet', onProgress = () => {}) {
+async function generateBlog(data, dart, finance, images, mode = 'sonnet', onProgress = () => {}) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다');
 
   const model = MODEL_MAP[mode] || MODEL_MAP.sonnet;
   const systemPrompt = loadSystemPrompt();
-  const userPrompt = buildUserPrompt(data, dart, images);
+  const userPrompt = buildUserPrompt(data, dart, finance, images);
 
   console.log('=== blog-writer userPrompt ===');
   console.log(userPrompt);

@@ -5,6 +5,7 @@ import { getStockName } from '../../../lib/utils/stock-codes';
 import { fetchStockData } from '../../../lib/data-fetcher';
 import { captureSimplyStock } from '../../../lib/screenshot';
 import { checkDisclosures } from '../../../lib/dart-checker';
+import { fetchFinanceData } from '../../../lib/finance-fetcher';
 import { generateBlog } from '../../../lib/blog-writer';
 
 export async function POST(request) {
@@ -28,6 +29,7 @@ export async function POST(request) {
 
       let stockData = null;
       let dartResult = null;
+      let financeData = null;
       let images = [];
       let markdown = '';
 
@@ -84,12 +86,32 @@ export async function POST(request) {
           dartResult = { hits: [], clean: [], error: err.message };
         }
 
-        // ── Step 4: 블로그 글 생성 (data 모드에서는 스킵) ──
+        // ── Step 4: 재무제표 조회 ──
+        send({ type: 'step_start', step: 4, message: '재무제표 조회 중...' });
+        try {
+          financeData = await fetchFinanceData(stockCode, (msg) => {
+            send({ type: 'step_progress', step: 4, message: msg });
+          });
+          if (financeData) {
+            fs.writeFileSync(
+              path.join(outputDir, 'finance.json'),
+              JSON.stringify(financeData, null, 2),
+            );
+            send({ type: 'step_done', step: 4, message: `재무제표 ${Object.keys(financeData.raw).length}건 조회 완료` });
+          } else {
+            send({ type: 'step_done', step: 4, message: '재무제표 데이터 없음 (스킵)' });
+          }
+        } catch (err) {
+          send({ type: 'step_error', step: 4, message: err.message });
+          // 재무제표 실패해도 계속 진행
+        }
+
+        // ── Step 5: 블로그 글 생성 (data 모드에서는 스킵) ──
         if (mode !== 'data') {
-          send({ type: 'step_start', step: 4, message: '글 생성 중...' });
+          send({ type: 'step_start', step: 5, message: '글 생성 중...' });
           try {
-            markdown = await generateBlog(stockData, dartResult, images, mode, (msg) => {
-              send({ type: 'step_progress', step: 4, message: msg });
+            markdown = await generateBlog(stockData, dartResult, financeData, images, mode, (msg) => {
+              send({ type: 'step_progress', step: 5, message: msg });
             });
             // 마크다운 저장
             fs.writeFileSync(
@@ -97,9 +119,9 @@ export async function POST(request) {
               markdown,
             );
             send({ type: 'markdown', content: markdown });
-            send({ type: 'step_done', step: 4, message: '글 생성 완료' });
+            send({ type: 'step_done', step: 5, message: '글 생성 완료' });
           } catch (err) {
-            send({ type: 'step_error', step: 4, message: err.message });
+            send({ type: 'step_error', step: 5, message: err.message });
           }
         }
 
