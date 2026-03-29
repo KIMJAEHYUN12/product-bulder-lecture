@@ -1,8 +1,8 @@
 /**
  * DART 공시 HTML 파싱 모듈
  *
- * 구조화 API가 없는 6개 공시 타입의 HTML을 파싱하여 핵심 데이터 추출:
- * 임원매매, 영업정지, 대량보유, 최대주주변경, 감사의견, 블록딜
+ * 구조화 API가 없는 7개 공시 타입의 HTML을 파싱하여 핵심 데이터 추출:
+ * 임원매매, 영업정지, 대량보유, 최대주주변경, 감사의견, 블록딜, 배당
  */
 
 const cheerio = require('cheerio');
@@ -493,6 +493,47 @@ function parseBlockDeal(allRows) {
   return Object.keys(data).length > 0 ? data : null;
 }
 
+function parseDividend(allRows) {
+  const data = {};
+
+  // 1주당 배당금
+  const perShareRow = findRow(allRows, '1주당', '배당금') || findRow(allRows, '주당배당금');
+  if (perShareRow) {
+    const v = getValueAfterLabel(perShareRow, '배당금');
+    if (v) data['1주당배당금'] = v.replace(/[^0-9,]/g, '') + '원';
+  }
+
+  // 배당수익률 / 시가배당율
+  const yieldRow = findRow(allRows, '배당수익률') || findRow(allRows, '시가배당율') || findRow(allRows, '시가배당률');
+  if (yieldRow) {
+    const v = getValueAfterLabel(yieldRow, '배당');
+    if (v) data['배당수익률'] = v.replace(/[^0-9.]/g, '') + '%';
+  }
+
+  // 배당기준일
+  const dateRow = findRow(allRows, '배당기준일');
+  if (dateRow) {
+    const v = getValueAfterLabel(dateRow, '배당기준일');
+    if (v) data['배당기준일'] = v;
+  }
+
+  // 배당금총액
+  const totalRow = findRow(allRows, '배당금총액') || findRow(allRows, '배당금 총액');
+  if (totalRow) {
+    const v = getValueAfterLabel(totalRow, '배당금');
+    if (v) data['배당금총액'] = v.replace(/[^0-9,-]/g, '');
+  }
+
+  // 배당종류
+  const typeRow = findRow(allRows, '배당종류') || findRow(allRows, '배당구분');
+  if (typeRow) {
+    const v = getValueAfterLabel(typeRow, '배당');
+    if (v && v.length < 20) data['배당종류'] = v;
+  }
+
+  return Object.keys(data).length > 0 ? data : null;
+}
+
 // ── 타입 → 파서 매핑 ───────────────────────────────────────
 
 const TYPE_PARSERS = {
@@ -502,6 +543,7 @@ const TYPE_PARSERS = {
   '최대주주변경': parseMajorShareholderChange,
   '감사의견': parseAuditOpinion,
   '블록딜': parseBlockDeal,
+  '배당': parseDividend,
 };
 
 // ── 타입별 summary 포맷터 ───────────────────────────────────
@@ -585,6 +627,21 @@ const SUMMARY_FORMATTERS = {
     const parts = [name, type, shares, period].filter(Boolean);
     if (amount) parts.push(`약 ${amount}`);
     return parts.join(' ') || '블록딜 공시 확인';
+  },
+
+  '배당': (d) => {
+    const perShare = d['1주당배당금'] || '';
+    const yield_ = d['배당수익률'] || '';
+    const baseDate = shortDate(d['배당기준일']) || d['배당기준일'] || '';
+    const total = formatBillion(d['배당금총액']);
+    const kind = d['배당종류'] || '';
+    const parts = [];
+    if (kind) parts.push(kind);
+    if (perShare) parts.push(`1주당 ${perShare}`);
+    if (yield_) parts.push(`수익률 ${yield_}`);
+    if (total) parts.push(`총액 ${total}`);
+    if (baseDate) parts.push(`(기준일 ${baseDate})`);
+    return parts.join(' ') || '배당 공시 확인';
   },
 };
 
