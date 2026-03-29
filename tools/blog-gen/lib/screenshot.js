@@ -546,77 +546,132 @@ async function captureValuationSection(page, outputPath) {
 
 /** DART 공시 유형별 캡처 키워드 (우선순위 순) */
 const DART_CAPTURE_TARGETS = {
-  '임원매매': ['특정증권등의 소유상황', '거래내역', '거래계획', '특정증권등'],
+  '임원매매': ['보유주식', '소유주식', '거래내역', '특정증권등의 소유상황', '증권등의 종류'],
   '대량보유': ['보유주식등의 수', '보유비율', '요약정보', '보유주식'],
   '영업정지': ['영업정지', '중단사유', '영업정지금액'],
   '감사의견': ['감사의견', '재무상태표', '손익계산서', '의견종류'],
   '신규시설투자': ['투자내역', '투자금액'],
-  '자기주식': ['취득', '처분', '자기주식'],
+  '자기주식': ['처분예정주식', '처분주식', '취득예정주식', '자기주식처분', '자기주식취득'],
   '단일판매공급': ['계약내역', '계약금액'],
   '유상증자': ['발행주식', '조달금액', '증자방식'],
   '소송': ['소송내용', '소송가액'],
-  '최대주주변경': ['변경내역', '최대주주', '변경후'],
+  '최대주주변경': ['변동내역', '변경내역', '최대주주'],
   '블록딜': ['거래내역', '주식등의대량보유'],
 };
 
 /**
- * DART 본문 iframe(또는 frame) 찾기
- * DART 공시 페이지는 본문이 iframe 안에 있음
+ * DART 본문 iframe 찾기 — 모든 frame을 탐색해서 table이 가장 많은 프레임 선택
+ * DART 공시 페이지는 거의 모든 공시가 iframe 안에 본문이 있음
  */
 async function findDartContentFrame(page) {
-  // 1. iframe#ifrm 또는 iframe 내에서 table이 있는 프레임 찾기
   const frames = page.frames();
+  let bestFrame = page.mainFrame();
+  let bestCount = 0;
+
   for (const frame of frames) {
     if (frame === page.mainFrame()) continue;
     try {
-      const hasTable = await frame.evaluate(() => {
-        return document.querySelectorAll('table').length > 0;
+      const tableCount = await frame.evaluate(() => {
+        return document.querySelectorAll('table').length;
       });
-      if (hasTable) return frame;
+      console.log(`    frame "${frame.name() || frame.url().slice(-40)}" → table ${tableCount}개`);
+      if (tableCount > bestCount) {
+        bestCount = tableCount;
+        bestFrame = frame;
+      }
     } catch {
       // cross-origin frame 등 무시
     }
   }
-  // iframe이 없으면 메인 프레임 반환
-  return page.mainFrame();
+
+  // 메인 프레임 table 수도 확인
+  try {
+    const mainCount = await page.mainFrame().evaluate(() => {
+      return document.querySelectorAll('table').length;
+    });
+    console.log(`    mainFrame → table ${mainCount}개`);
+    if (mainCount > bestCount) {
+      bestFrame = page.mainFrame();
+    }
+  } catch {}
+
+  return bestFrame;
 }
 
 /**
  * 프레임 내에서 키워드로 핵심 테이블 찾아 element handle 반환
+ * 모든 텍스트 노드를 탐색 (th, td, caption, h1~h4, p, span, b, strong, font)
  */
 async function findTargetTable(frame, keywords) {
+  // 디버그: 프레임 내 모든 table 개수 출력
+  const tableInfo = await frame.evaluate(() => {
+    const tables = document.querySelectorAll('table');
+    return Array.from(tables).slice(0, 10).map((t, i) => {
+      const firstCell = t.querySelector('th, td, caption');
+      return `table[${i}] ${t.rows?.length || 0}행 — "${(firstCell?.textContent || '').trim().slice(0, 40)}"`;
+    });
+  });
+  console.log(`    프레임 내 테이블:`, tableInfo.join(' | '));
+
   for (const keyword of keywords) {
+    console.log(`    키워드 "${keyword}" 검색 중...`);
+
     const handle = await frame.evaluateHandle((kw) => {
-      const candidates = document.querySelectorAll('th, td, caption, h3, h4, p, span');
+      // 넓은 범위 검색: 거의 모든 텍스트 노드
+      const selectors = 'th, td, caption, h1, h2, h3, h4, p, span, b, strong, font, div';
+      const candidates = document.querySelectorAll(selectors);
       for (const node of candidates) {
+        // 자기 자신의 직접 텍스트만 확인 (자식 텍스트 제외하면 너무 엄격하므로 includes 사용)
         if (!node.textContent.includes(kw)) continue;
-        // 가장 가까운 <table> 부모 찾기
+
+        // 1. 가장 가까운 <table> 부모
         const table = node.closest('table');
-        if (table) return table;
-        // table이 아니면 바로 다음 형제에서 table 찾기
-        let sibling = node.parentElement?.nextElementSibling;
-        while (sibling) {
+        if (table && table.rows && table.rows.length > 1) return table;
+
+        // 2. 다음 형제에서 table 찾기
+        let sibling = node.nextElementSibling || node.parentElement?.nextElementSibling;
+        let depth = 0;
+        while (sibling && depth < 5) {
           if (sibling.tagName === 'TABLE') return sibling;
           const inner = sibling.querySelector('table');
           if (inner) return inner;
           sibling = sibling.nextElementSibling;
+          depth++;
         }
-        return node.parentElement;
+
+        // 3. 부모의 다음 형제에서 table 찾기
+        let parent = node.parentElement;
+        for (let up = 0; up < 3 && parent; up++) {
+          sibling = parent.nextElementSibling;
+          let sibDepth = 0;
+          while (sibling && sibDepth < 3) {
+            if (sibling.tagName === 'TABLE') return sibling;
+            const inner = sibling.querySelector('table');
+            if (inner) return inner;
+            sibling = sibling.nextElementSibling;
+            sibDepth++;
+          }
+          parent = parent.parentElement;
+        }
       }
       return null;
     }, keyword);
 
     const el = handle.asElement();
     if (el) {
-      // 요소 크기 확인
       const box = await el.boundingBox();
       if (box && box.width > 50 && box.height > 20) {
-        console.log(`  DART 키워드 "${keyword}" → 요소 발견 (${Math.round(box.width)}x${Math.round(box.height)})`);
+        const info = await frame.evaluate(el => {
+          return `${el.tagName} ${el.rows?.length || 0}행 "${(el.querySelector('th,td')?.textContent || '').trim().slice(0, 30)}"`;
+        }, el);
+        console.log(`    키워드 "${keyword}" 매칭! → ${info} (${Math.round(box.width)}x${Math.round(box.height)})`);
         return el;
       }
     }
     handle.dispose();
   }
+
+  console.log(`    모든 키워드 매칭 실패`);
   return null;
 }
 
@@ -627,9 +682,10 @@ async function captureDartDisclosure(dartUrl, disclosureType, outputPath, browse
   const page = await browser.newPage();
 
   try {
-    console.log(`  DART 접속: ${disclosureType} — ${dartUrl}`);
+    console.log(`\n  ── DART 캡처 시작: ${disclosureType} ──`);
+    console.log(`  URL: ${dartUrl}`);
     await page.goto(dartUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-    await new Promise(r => setTimeout(r, 3000)); // DART 로딩 여유
+    await new Promise(r => setTimeout(r, 3000));
 
     // 팝업/오버레이 닫기
     await page.evaluate(() => {
@@ -637,49 +693,58 @@ async function captureDartDisclosure(dartUrl, disclosureType, outputPath, browse
         .forEach(btn => btn.click());
     }).catch(() => {});
 
-    // 본문 iframe 찾기
+    // 본문 iframe 찾기 (DART 공시는 거의 항상 iframe 내부)
+    console.log(`  프레임 탐색 중... (전체 ${page.frames().length}개)`);
     const frame = await findDartContentFrame(page);
     const isIframe = frame !== page.mainFrame();
-    console.log(`  프레임: ${isIframe ? 'iframe 내부' : '메인 페이지'}`);
+    console.log(`  선택된 프레임: ${isIframe ? 'iframe' : 'main'} — ${frame.url().slice(-60)}`);
 
     // 공시 유형별 키워드
     const keywords = DART_CAPTURE_TARGETS[disclosureType] || [disclosureType];
+    console.log(`  검색 키워드: [${keywords.join(', ')}]`);
 
     // 키워드로 핵심 테이블 찾기
     const targetEl = await findTargetTable(frame, keywords);
 
     if (targetEl) {
-      // element.screenshot()은 요소 전체를 자동 캡처 (스크롤 무관)
+      // 스크롤 후 대기
       await frame.evaluate(el => {
         el.scrollIntoView({ block: 'center', behavior: 'instant' });
       }, targetEl);
       await new Promise(r => setTimeout(r, 1000));
 
-      if (isIframe) {
-        // iframe 내부 요소는 element.screenshot()이 안 될 수 있음
-        // → 프레임 내 요소의 위치를 구해서 page 레벨에서 clip 캡처
-        const box = await targetEl.boundingBox();
-        if (box) {
-          // 테이블 높이가 너무 크면 상단 1200px만
-          const captureHeight = Math.min(box.height + 60, 1200);
-          await page.screenshot({
-            path: outputPath,
-            clip: {
-              x: Math.max(0, box.x - 10),
-              y: Math.max(0, box.y - 30),
-              width: Math.min(box.width + 20, 1900),
-              height: captureHeight,
-            },
-          });
-          console.log(`  캡처 완료: ${disclosureType} (clip ${Math.round(box.width)}x${Math.round(captureHeight)})`);
-          return true;
+      // boundingBox로 위치 확인
+      const box = await targetEl.boundingBox();
+
+      if (box) {
+        // 뷰포트 밖이면 뷰포트 확장 후 재시도
+        if (box.y + box.height > 1080) {
+          await page.setViewport({ width: VIEWPORT.width, height: Math.ceil(box.y + box.height + 100), deviceScaleFactor: VIEWPORT.deviceScaleFactor });
+          await new Promise(r => setTimeout(r, 500));
         }
+
+        const captureHeight = Math.min(box.height + 60, 1500);
+        await page.screenshot({
+          path: outputPath,
+          clip: {
+            x: Math.max(0, box.x - 10),
+            y: Math.max(0, box.y - 30),
+            width: Math.min(box.width + 20, 1900),
+            height: captureHeight,
+          },
+        });
+        console.log(`  캡처 완료: ${disclosureType} (clip ${Math.round(box.width)}x${Math.round(captureHeight)})`);
+        return true;
       }
 
-      // 메인 프레임이면 element.screenshot() 직접 사용
-      await targetEl.screenshot({ path: outputPath });
-      console.log(`  캡처 완료: ${disclosureType} (element screenshot)`);
-      return true;
+      // boundingBox null → element.screenshot() 시도
+      try {
+        await targetEl.screenshot({ path: outputPath });
+        console.log(`  캡처 완료: ${disclosureType} (element screenshot)`);
+        return true;
+      } catch (e) {
+        console.warn(`  element.screenshot 실패:`, e.message);
+      }
     }
 
     // fallback: 전체 페이지 캡처 후 상단 crop
