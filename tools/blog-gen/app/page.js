@@ -150,10 +150,13 @@ export default function Home() {
     const withImages = markdown.replace(
       /━+\n📸 여기에 이미지 삽입:\s*(.+?)\n/g,
       (_, filename) => {
+        const name = filename.trim();
+        // LLM이 "images/01_..." 또는 "01_..."로 쓸 수 있음 → 중복 방지
+        const imgPath = name.startsWith('images/') ? name : `images/${name}`;
         const src = outputDir
-          ? `/api/image?dir=${encodeURIComponent(outputDir)}&path=images/${encodeURIComponent(filename.trim())}`
+          ? `/api/image?dir=${encodeURIComponent(outputDir)}&path=${encodeURIComponent(imgPath)}`
           : '';
-        return `![${filename.trim()}](${src})\n`;
+        return `![${name}](${src})\n`;
       }
     ).replace(/━+\n?/g, ''); // 남은 보더 라인 제거
     return marked.parse(withImages);
