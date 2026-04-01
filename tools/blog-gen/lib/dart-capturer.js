@@ -79,6 +79,46 @@ const GENERAL_TABLE_KEYWORDS = {
   critical: ['영업정지', '사업철수'],
 };
 
+// 일반 공시 유형별 트리 탐색 키워드
+const GENERAL_TREE_CONFIG = {
+  audit: {
+    treeKeywords: ['감사의견', '감사보고서', '독립된 감사인'],
+    fallback: true,
+  },
+  stake: {
+    treeKeywords: ['보유현황', '요약정보', '대량보유상황보고서'],
+    fallback: true,
+  },
+  corporate: {
+    treeKeywords: ['거래내역', '취득결정', '자기주식 취득'],
+    fallback: true,
+  },
+  executive: {
+    treeKeywords: ['변동내역', '특정증권등의 거래내역'],
+    fallback: true,
+  },
+  critical: {
+    treeKeywords: ['주요경영사항', '투자판단 관련'],
+    fallback: true,
+  },
+};
+
+// 사업보고서 추가 캡처 섹션 (매출/수주)
+const REPORT_EXTRA_SECTIONS = [
+  {
+    id: 'sales',
+    treeKeywords: ['매출 및 수주상황', '매출에 관한 사항', '매출실적'],
+    filenameSuffix: 'sales',
+    captureMode: 'tables',
+  },
+  {
+    id: 'orders',
+    treeKeywords: ['수주상황', '수주현황'],
+    filenameSuffix: 'orders',
+    captureMode: 'tables',
+  },
+];
+
 // ── 공시 선별 ─────────────────────────────────
 
 async function selectDisclosures(stockCode) {
@@ -122,7 +162,7 @@ async function selectDisclosures(stockCode) {
       const title = item.report_nm;
       for (const rule of PRIORITY_RULES) {
         if (rule.match(title)) {
-          if (['annual', 'semi', 'quarterly'].includes(rule.type) && usedTypes.has(rule.type)) continue;
+          if (usedTypes.has(rule.type)) continue;
           ranked.push({
             rank: rule.rank,
             type: rule.type,
@@ -266,6 +306,79 @@ async function captureFromDirectUrl(browser, url, filePath, options = {}) {
   } finally {
     await capturePage.close();
   }
+}
+
+/**
+ * 프레임 내 테이블 복수 캡처 (매출/수주 등 긴 페이지용)
+ * - 높이 50px 이상 테이블만 필터
+ * - 3개 이하 → 프레임 전체 1장
+ * - 4개 이상 → 상위 3개 개별 element.screenshot()
+ */
+async function captureTablesFromFrame(browser, frameUrl, stockCode, suffix, outputDir) {
+  const capturePage = await browser.newPage();
+  const results = [];
+  try {
+    await capturePage.setViewport({ width: 1200, height: 10000, deviceScaleFactor: 2 });
+    await capturePage.goto(frameUrl, { waitUntil: 'networkidle2', timeout: 20000 });
+    await delay(1000);
+
+    await capturePage.evaluate(() => {
+      document.body.style.overflow = 'visible';
+      document.body.style.height = 'auto';
+      document.documentElement.style.overflow = 'visible';
+      document.documentElement.style.height = 'auto';
+    });
+
+    // 높이 50px 이상 테이블 수집
+    const tableCount = await capturePage.evaluate(() => {
+      const tables = Array.from(document.querySelectorAll('table'));
+      return tables.filter((t) => t.getBoundingClientRect().height > 50).length;
+    });
+
+    console.log(`    테이블 ${tableCount}개 발견 (height>50px)`);
+
+    if (tableCount === 0) return results;
+
+    if (tableCount <= 3) {
+      // 전체 프레임 1장 캡처
+      const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_dart_${suffix}.png`);
+      await capturePage.screenshot({ path: filePath, fullPage: true });
+      if (validateCapture(filePath, suffix)) {
+        results.push(`images/dart/${stockCode}_dart_${suffix}.png`);
+      }
+    } else {
+      // 상위 3개 테이블 개별 캡처
+      const handles = await capturePage.evaluateHandle(() => {
+        const tables = Array.from(document.querySelectorAll('table'));
+        return tables
+          .filter((t) => t.getBoundingClientRect().height > 50)
+          .slice(0, 3);
+      });
+
+      const arr = await handles.getProperties();
+      let idx = 1;
+      for (const [, handle] of arr) {
+        const el = handle.asElement();
+        if (!el) continue;
+        const paddedIdx = String(idx).padStart(2, '0');
+        const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_dart_${suffix}_${paddedIdx}.png`);
+
+        await capturePage.evaluate((e) => e.scrollIntoView({ block: 'start', behavior: 'instant' }), el);
+        await delay(300);
+        await el.screenshot({ path: filePath });
+
+        if (validateCapture(filePath, `${suffix}_${paddedIdx}`)) {
+          results.push(`images/dart/${stockCode}_dart_${suffix}_${paddedIdx}.png`);
+        }
+        idx++;
+      }
+    }
+  } catch (err) {
+    console.log(`    테이블 캡처 실패: ${err.message}`);
+  } finally {
+    await capturePage.close();
+  }
+  return results;
 }
 
 /**
@@ -417,6 +530,52 @@ async function captureReportSections(page, browser, stockCode, outputDir, disc) 
     }
   }
 
+  // ── 추가 섹션 (매출/수주) — annual에만 적용 ──
+  if (disc.type === 'annual') {
+    for (const extra of REPORT_EXTRA_SECTIONS) {
+      try {
+        let clicked = null;
+        for (const kw of extra.treeKeywords) {
+          clicked = await clickTreeNode(page, kw);
+          if (clicked) break;
+        }
+
+        if (!clicked) {
+          console.log(`    목차에서 "${extra.id}" 찾지 못함, 스킵`);
+          continue;
+        }
+
+        console.log(`    "${clicked}" 클릭 (${extra.id}), 콘텐츠 로딩 대기...`);
+        await delay(3000);
+
+        const contentFrame = await findContentFrame(page);
+        if (!contentFrame) {
+          console.log(`    콘텐츠 프레임 없음, 스킵`);
+          continue;
+        }
+
+        const frameUrl = contentFrame.url();
+        if (!frameUrl || frameUrl === 'about:blank') {
+          console.log(`    프레임 URL 없음, 스킵`);
+          continue;
+        }
+
+        if (extra.captureMode === 'tables') {
+          const files = await captureTablesFromFrame(browser, frameUrl, stockCode, extra.filenameSuffix, outputDir);
+          results.push(...files);
+        } else {
+          const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_dart_${extra.filenameSuffix}.png`);
+          const ok = await captureFromDirectUrl(browser, frameUrl, filePath, { minRows: 3 });
+          if (ok && validateCapture(filePath, extra.id)) {
+            results.push(`images/dart/${stockCode}_dart_${extra.filenameSuffix}.png`);
+          }
+        }
+      } catch (err) {
+        console.log(`    ${extra.id} 캡처 실패: ${err.message}`);
+      }
+    }
+  }
+
   return results;
 }
 
@@ -424,16 +583,35 @@ async function captureReportSections(page, browser, stockCode, outputDir, disc) 
 
 async function captureGeneralDisclosure(page, browser, stockCode, disc, outputDir) {
   try {
+    const suffix = `dart_${disc.type}`;
+    const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_${suffix}.png`);
+    const keywords = GENERAL_TABLE_KEYWORDS[disc.type] || [];
+    const treeConfig = GENERAL_TREE_CONFIG[disc.type];
+
+    // 트리 탐색 시도
+    let treeClicked = false;
+    if (treeConfig) {
+      for (const kw of treeConfig.treeKeywords) {
+        const clicked = await clickTreeNode(page, kw);
+        if (clicked) {
+          console.log(`    트리 "${clicked}" 클릭, 콘텐츠 로딩 대기...`);
+          treeClicked = true;
+          await delay(2000);
+          break;
+        }
+      }
+      if (!treeClicked) {
+        console.log(`    트리 매칭 실패 (${disc.type}), fallback 시도`);
+        if (!treeConfig.fallback) return null;
+      }
+    }
+
     const contentFrame = await findContentFrame(page);
     if (!contentFrame) return null;
 
     const frameUrl = contentFrame.url();
     if (!frameUrl || frameUrl === 'about:blank') return null;
 
-    const suffix = `dart_${disc.type}`;
-    const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_${suffix}.png`);
-
-    const keywords = GENERAL_TABLE_KEYWORDS[disc.type] || [];
     const ok = await captureFromDirectUrl(browser, frameUrl, filePath, {
       keywords,
       minRows: 3,
