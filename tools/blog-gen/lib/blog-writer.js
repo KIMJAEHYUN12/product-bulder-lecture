@@ -145,7 +145,7 @@ function formatSupplyDate(dateStr) {
 
 // ── 유저 프롬프트 빌드 ───────────────────────────────────
 
-function buildUserPrompt(data, dart, finance, images, businessSummary) {
+function buildUserPrompt(data, dart, finance, images, businessSummary, news, competitors) {
   const sections = [];
 
   // 오늘 날짜
@@ -295,6 +295,31 @@ function buildUserPrompt(data, dart, finance, images, businessSummary) {
     sections.push('→ 데이터가 있는 항목만 사용. 없는 항목은 언급하지 마라.');
   }
 
+  // 최근 뉴스
+  if (news?.articles?.length > 0) {
+    sections.push('\n## 최근 뉴스 (네이버 검색)');
+    for (const a of news.articles) {
+      sections.push(`- [${a.pubDate}] ${a.title}`);
+      if (a.description) sections.push(`  ${a.description.slice(0, 100)}`);
+    }
+    sections.push('→ 최근 뉴스 동향을 글 도입부 "독자 질문 훅"이나 "공시/리스크" 섹션에 반영할 것');
+    sections.push('→ 뉴스 내용을 그대로 복사하지 말고, 핵심만 요약해서 분석에 녹여라');
+  }
+
+  // 경쟁사 비교 데이터
+  if (competitors?.competitors?.length > 0) {
+    sections.push('\n## 경쟁사 비교 데이터');
+    sections.push('| 종목명 | 현재가 | 시가총액 | PER | Forward PER | PBR |');
+    sections.push('|--------|--------|----------|-----|-------------|-----|');
+    for (const c of competitors.competitors) {
+      sections.push(
+        `| ${c.name} | ${c.price?.toLocaleString() || 'N/A'} | ${c.marketCap || 'N/A'} | ${c.per ?? 'N/A'} | ${c.forwardPer ?? 'N/A'} | ${c.pbr ?? 'N/A'} |`
+      );
+    }
+    sections.push('→ 밸류에이션 섹션에서 경쟁사 대비 고평가/저평가 여부를 비교 분석할 것');
+    sections.push('→ "동종 업계 평균 PER 대비 ~" 형태로 자연스럽게 녹여라');
+  }
+
   // DART 공시 — summary가 있는 히트 + 배당은 summary null이어도 포함
   const validHits = dart?.hits?.filter(h => h.summary || h.type === '배당') || [];
   if (validHits.length > 0) {
@@ -373,23 +398,26 @@ function buildUserPrompt(data, dart, finance, images, businessSummary) {
  * @param {object|null} finance - fetchFinanceData 결과
  * @param {string[]} images - 이미지 파일 목록
  * @param {object|null} businessSummary - parseBusinessSummary 결과
- * @param {'sonnet'|'opus'} mode - 모델 선택
- * @param {(msg: string) => void} onProgress
+ * @param {object|null} news - fetchRecentNews 결과
+ * @param {object|null} competitors - fetchCompetitorData 결과
+ * @param {object} opts - { mode, review, onProgress }
  * @returns {Promise<string>} 마크다운 텍스트
  */
-async function generateBlog(data, dart, finance, images, businessSummary, mode = 'sonnet', onProgress = () => {}) {
+async function generateBlog(data, dart, finance, images, businessSummary, news, competitors, opts = {}) {
+  const { mode = 'sonnet', review = true, onProgress = () => {} } = opts;
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다');
 
   const model = MODEL_MAP[mode] || MODEL_MAP.sonnet;
   const systemPrompt = loadSystemPrompt();
-  const userPrompt = buildUserPrompt(data, dart, finance, images, businessSummary);
+  const userPrompt = buildUserPrompt(data, dart, finance, images, businessSummary, news, competitors);
 
   console.log('=== blog-writer userPrompt ===');
   console.log(userPrompt);
   console.log('=== end userPrompt ===');
 
-  onProgress(`${mode} 모델로 글 생성 중...`);
+  onProgress(`${mode} 모델로 글 생성 중 (1차)...`);
 
   const client = new Anthropic({ apiKey });
 
@@ -400,10 +428,59 @@ async function generateBlog(data, dart, finance, images, businessSummary, mode =
     messages: [{ role: 'user', content: userPrompt }],
   });
 
-  const text = response.content
+  let text = response.content
     .filter(c => c.type === 'text')
     .map(c => c.text)
     .join('\n');
+
+  // ── 2차 자동 검수 (review=true일 때, 항상 sonnet 사용) ──
+  if (review) {
+    onProgress('2차 검수 중 (Sonnet)...');
+    try {
+      const reviewPrompt = `아래는 SimplyStock 블로그 종목 분석 글 초안입니다.
+
+다음 체크리스트를 기준으로 검수하고, 문제가 있으면 직접 수정한 최종본을 출력하세요.
+문제가 없으면 초안을 그대로 출력하세요.
+
+## 검수 체크리스트
+1. **날짜 정확성**: 제목·본문의 날짜가 오늘(${new Date().getFullYear()}년 ${new Date().getMonth() + 1}월 ${new Date().getDate()}일)과 일치하는가?
+2. **수치 일치**: 본문의 PER, 주가, 수급 수치가 위 데이터와 일치하는가?
+3. **이미지 마커**: 제공된 이미지 파일에 대해 📸 마커가 빠짐없이 들어갔는가?
+4. **DART 공시**: 히트 항목이 본문 "공시/리스크" 섹션에 반영되었는가?
+5. **환각 체크**: 데이터에 없는 수치나 사실을 지어낸 부분이 없는가?
+6. **톤 일관성**: 구어체("~거예요", "~잖아요")가 유지되고, 투자 권유 어투("~하세요")가 없는가?
+7. **구조 완결**: 도입 훅 → 5단계 분석 → 체크리스트 테이블 → 면책 구조가 완전한가?
+
+## 원본 데이터 요약
+종목: ${data.basic.name} (${data.basic.code})
+현재가: ${data.basic.price?.toLocaleString() || 'N/A'}원
+
+## 초안
+${text}
+
+위 체크리스트를 적용한 최종본만 출력하세요. 설명이나 코멘트 없이 마크다운 글 본문만 출력.`;
+
+      const reviewResponse = await client.messages.create({
+        model: MODEL_MAP.sonnet,
+        max_tokens: 8000,
+        messages: [{ role: 'user', content: reviewPrompt }],
+      });
+
+      const reviewedText = reviewResponse.content
+        .filter(c => c.type === 'text')
+        .map(c => c.text)
+        .join('\n');
+
+      if (reviewedText.length > text.length * 0.5) {
+        text = reviewedText;
+        onProgress('2차 검수 완료 — 최종본 반영');
+      } else {
+        onProgress('2차 검수 결과가 너무 짧음 — 1차 초안 유지');
+      }
+    } catch (reviewErr) {
+      onProgress(`2차 검수 실패 (1차 초안 유지): ${reviewErr.message}`);
+    }
+  }
 
   onProgress('글 생성 완료');
   return text;

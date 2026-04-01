@@ -8,10 +8,12 @@ import { checkDisclosures } from '../../../lib/dart-checker';
 import { selectDisclosures, captureDartPages } from '../../../lib/dart-capturer';
 import { fetchFinanceData } from '../../../lib/finance-fetcher';
 import { parseBusinessSummary } from '../../../lib/dart-html-parser';
+import { fetchRecentNews } from '../../../lib/news-fetcher';
+import { fetchCompetitorData } from '../../../lib/competitor-fetcher';
 import { generateBlog } from '../../../lib/blog-writer';
 
 export async function POST(request) {
-  const { stockCode, mode } = await request.json();
+  const { stockCode, mode, review = true } = await request.json();
 
   if (!stockCode || !mode) {
     return NextResponse.json({ error: 'stockCode와 mode가 필요합니다' }, { status: 400 });
@@ -33,6 +35,8 @@ export async function POST(request) {
       let dartResult = null;
       let financeData = null;
       let businessSummary = null;
+      let news = null;
+      let competitors = null;
       let disclosures = [];
       let images = [];
       let markdown = '';
@@ -148,12 +152,47 @@ export async function POST(request) {
           }
         }
 
-        // ── Step 6: 블로그 글 생성 (data 모드에서는 스킵) ──
+        // ── Step 6: 뉴스 검색 ──
+        send({ type: 'step_start', step: 6, message: '뉴스 검색 중...' });
+        try {
+          news = await fetchRecentNews(stockName, (msg) => {
+            send({ type: 'step_progress', step: 6, message: msg });
+          });
+          if (news) {
+            send({ type: 'step_done', step: 6, message: `뉴스 ${news.articles.length}건 검색 완료` });
+          } else {
+            send({ type: 'step_done', step: 6, message: '뉴스 검색 스킵 (API 키 없음 또는 결과 없음)' });
+          }
+        } catch (err) {
+          send({ type: 'step_error', step: 6, message: err.message });
+        }
+
+        // ── Step 7: 경쟁사 비교 데이터 ──
+        send({ type: 'step_start', step: 7, message: '경쟁사 데이터 조회 중...' });
+        try {
+          const industry = stockData?.basic?.industry || '';
+          competitors = await fetchCompetitorData(stockCode, industry, (msg) => {
+            send({ type: 'step_progress', step: 7, message: msg });
+          });
+          if (competitors) {
+            send({ type: 'step_done', step: 7, message: `경쟁사 ${competitors.competitors.length}개 데이터 완료` });
+          } else {
+            send({ type: 'step_done', step: 7, message: '경쟁사 매핑 없음 (스킵)' });
+          }
+        } catch (err) {
+          send({ type: 'step_error', step: 7, message: err.message });
+        }
+
+        // ── Step 8: 블로그 글 생성 + 자동 검수 (data 모드에서는 스킵) ──
         if (mode !== 'data') {
-          send({ type: 'step_start', step: 6, message: '글 생성 중...' });
+          send({ type: 'step_start', step: 8, message: '글 생성 중...' });
           try {
-            markdown = await generateBlog(stockData, dartResult, financeData, images, businessSummary, mode, (msg) => {
-              send({ type: 'step_progress', step: 6, message: msg });
+            markdown = await generateBlog(stockData, dartResult, financeData, images, businessSummary, news, competitors, {
+              mode,
+              review,
+              onProgress: (msg) => {
+                send({ type: 'step_progress', step: 8, message: msg });
+              },
             });
             // 마크다운 저장
             fs.writeFileSync(
@@ -161,9 +200,9 @@ export async function POST(request) {
               markdown,
             );
             send({ type: 'markdown', content: markdown });
-            send({ type: 'step_done', step: 6, message: '글 생성 완료' });
+            send({ type: 'step_done', step: 8, message: '글 생성 완료' });
           } catch (err) {
-            send({ type: 'step_error', step: 6, message: err.message });
+            send({ type: 'step_error', step: 8, message: err.message });
           }
         }
 
