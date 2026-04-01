@@ -7,6 +7,7 @@ import { captureSimplyStock } from '../../../lib/screenshot';
 import { checkDisclosures } from '../../../lib/dart-checker';
 import { selectDisclosures, captureDartPages } from '../../../lib/dart-capturer';
 import { fetchFinanceData } from '../../../lib/finance-fetcher';
+import { parseBusinessSummary } from '../../../lib/dart-html-parser';
 import { generateBlog } from '../../../lib/blog-writer';
 
 export async function POST(request) {
@@ -31,6 +32,8 @@ export async function POST(request) {
       let stockData = null;
       let dartResult = null;
       let financeData = null;
+      let businessSummary = null;
+      let disclosures = [];
       let images = [];
       let markdown = '';
 
@@ -74,7 +77,7 @@ export async function POST(request) {
 
           // DART 캡처 — 우선순위 기반 공시 선별 + element.screenshot()
           try {
-            const disclosures = await selectDisclosures(stockCode);
+            disclosures = await selectDisclosures(stockCode);
             if (disclosures.length > 0) {
               send({ type: 'step_progress', step: 3, message: `DART 캡처 ${disclosures.length}건 시작...` });
               const dartImages = await captureDartPages(disclosures, stockCode, outputDir, (msg) => {
@@ -122,12 +125,35 @@ export async function POST(request) {
           // 재무제표 실패해도 계속 진행
         }
 
-        // ── Step 5: 블로그 글 생성 (data 모드에서는 스킵) ──
-        if (mode !== 'data') {
-          send({ type: 'step_start', step: 5, message: '글 생성 중...' });
+        // ── Step 5: 사업보고서 텍스트 파싱 ──
+        const annualDisc = disclosures.find((d) => d.type === 'annual');
+        if (annualDisc) {
+          send({ type: 'step_start', step: 5, message: '사업보고서 텍스트 파싱 중...' });
           try {
-            markdown = await generateBlog(stockData, dartResult, financeData, images, mode, (msg) => {
+            businessSummary = await parseBusinessSummary(annualDisc.rceptNo, (msg) => {
               send({ type: 'step_progress', step: 5, message: msg });
+            });
+            if (businessSummary) {
+              fs.writeFileSync(
+                path.join(outputDir, 'business-summary.json'),
+                JSON.stringify(businessSummary, null, 2),
+              );
+              const fields = Object.entries(businessSummary).filter(([, v]) => v !== null).map(([k]) => k);
+              send({ type: 'step_done', step: 5, message: `사업보고서 파싱 완료: ${fields.join(', ')}` });
+            } else {
+              send({ type: 'step_done', step: 5, message: '사업보고서 파싱 데이터 없음 (스킵)' });
+            }
+          } catch (err) {
+            send({ type: 'step_error', step: 5, message: err.message });
+          }
+        }
+
+        // ── Step 6: 블로그 글 생성 (data 모드에서는 스킵) ──
+        if (mode !== 'data') {
+          send({ type: 'step_start', step: 6, message: '글 생성 중...' });
+          try {
+            markdown = await generateBlog(stockData, dartResult, financeData, images, businessSummary, mode, (msg) => {
+              send({ type: 'step_progress', step: 6, message: msg });
             });
             // 마크다운 저장
             fs.writeFileSync(
@@ -135,9 +161,9 @@ export async function POST(request) {
               markdown,
             );
             send({ type: 'markdown', content: markdown });
-            send({ type: 'step_done', step: 5, message: '글 생성 완료' });
+            send({ type: 'step_done', step: 6, message: '글 생성 완료' });
           } catch (err) {
-            send({ type: 'step_error', step: 5, message: err.message });
+            send({ type: 'step_error', step: 6, message: err.message });
           }
         }
 

@@ -145,7 +145,7 @@ function formatSupplyDate(dateStr) {
 
 // ── 유저 프롬프트 빌드 ───────────────────────────────────
 
-function buildUserPrompt(data, dart, finance, images) {
+function buildUserPrompt(data, dart, finance, images, businessSummary) {
   const sections = [];
 
   // 오늘 날짜
@@ -264,6 +264,37 @@ function buildUserPrompt(data, dart, finance, images) {
     sections.push('재무제표 데이터 없음 — 재무 분석 섹션을 생략할 것.');
   }
 
+  // 사업보고서 핵심 요약 (텍스트 파싱 데이터)
+  if (businessSummary) {
+    sections.push('\n## 사업보고서 핵심 요약 (텍스트 데이터 — 본문에 적극 활용할 것)');
+
+    if (businessSummary.businessOverview)
+      sections.push(`사업 개요: ${businessSummary.businessOverview}`);
+
+    if (businessSummary.salesData)
+      sections.push(`매출 구조:\n${businessSummary.salesData}`);
+
+    if (businessSummary.marketShare)
+      sections.push(`시장 점유율: ${businessSummary.marketShare}`);
+
+    if (businessSummary.keyManagement)
+      sections.push(`주요 경영사항: ${businessSummary.keyManagement}`);
+
+    if (businessSummary.dividend) {
+      const d = businessSummary.dividend;
+      const parts = [];
+      if (d.perShare) parts.push(`1주당 ${d.perShare}`);
+      if (d.yieldRate) parts.push(`시가배당률 ${d.yieldRate}`);
+      if (d.totalAmount) parts.push(`총액 ${d.totalAmount}`);
+      if (d.recordDate) parts.push(`기준일 ${d.recordDate}`);
+      sections.push(`배당: ${parts.join(', ')}`);
+      sections.push('→ 밸류에이션 섹션에서 배당 매력도를 함께 언급할 것');
+    }
+
+    sections.push('→ 위 정보를 본문에서 사업 구조 설명, 비유, 경쟁사 비교에 활용할 것');
+    sections.push('→ 데이터가 있는 항목만 사용. 없는 항목은 언급하지 마라.');
+  }
+
   // DART 공시 — summary가 있는 히트 + 배당은 summary null이어도 포함
   const validHits = dart?.hits?.filter(h => h.summary || h.type === '배당') || [];
   if (validHits.length > 0) {
@@ -307,13 +338,7 @@ function buildUserPrompt(data, dart, finance, images) {
       sections.push('아래 DART 이미지를 본문의 해당 분석 섹션에 📸 마커로 반드시 삽입할 것:');
       for (const f of dartImages) {
         const fname = f.split('/').pop();
-        if (fname.includes('수주현황')) {
-          sections.push(`📸 여기에 이미지 삽입: ${f} → "수주현황" 또는 "매출 파이프라인" 섹션에 삽입`);
-        } else if (fname.includes('사업내용')) {
-          sections.push(`📸 여기에 이미지 삽입: ${f} → "사업의 내용" 또는 "사업 구조" 섹션에 삽입`);
-        } else if (fname.includes('경영사항')) {
-          sections.push(`📸 여기에 이미지 삽입: ${f} → "주요 경영사항" 또는 "경영 실적" 섹션에 삽입`);
-        } else if (fname.includes('매출실적')) {
+        if (fname.includes('매출실적')) {
           sections.push(`📸 여기에 이미지 삽입: ${f} → "매출실적" 또는 "실적 분석" 섹션에 삽입`);
         } else if (fname.includes('재무상태표')) {
           sections.push(`📸 여기에 이미지 삽입: ${f} → "재무상태표" 또는 "재무 건전성" 섹션에 삽입`);
@@ -347,17 +372,18 @@ function buildUserPrompt(data, dart, finance, images) {
  * @param {object} dart - checkDisclosures 결과
  * @param {object|null} finance - fetchFinanceData 결과
  * @param {string[]} images - 이미지 파일 목록
+ * @param {object|null} businessSummary - parseBusinessSummary 결과
  * @param {'sonnet'|'opus'} mode - 모델 선택
  * @param {(msg: string) => void} onProgress
  * @returns {Promise<string>} 마크다운 텍스트
  */
-async function generateBlog(data, dart, finance, images, mode = 'sonnet', onProgress = () => {}) {
+async function generateBlog(data, dart, finance, images, businessSummary, mode = 'sonnet', onProgress = () => {}) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다');
 
   const model = MODEL_MAP[mode] || MODEL_MAP.sonnet;
   const systemPrompt = loadSystemPrompt();
-  const userPrompt = buildUserPrompt(data, dart, finance, images);
+  const userPrompt = buildUserPrompt(data, dart, finance, images, businessSummary);
 
   console.log('=== blog-writer userPrompt ===');
   console.log(userPrompt);

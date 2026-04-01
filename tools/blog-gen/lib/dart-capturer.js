@@ -60,9 +60,6 @@ const REPORT_SECTIONS = {
     { treeKeywords: ['매출', '수주'], tableKeywords: ['매출액', '매출'], suffix: 'dart_01_매출실적', label: '매출실적' },
     { treeKeywords: ['연결 재무상태표', '재무상태표'], tableKeywords: ['자산총계', '유동자산'], suffix: 'dart_02_연결재무상태표', label: '재무상태표' },
     { treeKeywords: ['연결 포괄손익', '포괄손익계산서', '손익계산서'], tableKeywords: ['매출액', '영업이익', '당기순이익'], suffix: 'dart_03_포괄손익계산서', label: '손익계산서' },
-    { treeKeywords: ['수주상황', '수주현황', '수주계약'], suffix: 'dart_04_수주현황', label: '수주현황', captureMode: 'tables' },
-    { treeKeywords: ['사업의 내용', '사업의내용', '사업개요'], suffix: 'dart_05_사업내용', label: '사업내용', captureMode: 'tables' },
-    { treeKeywords: ['주요 경영사항', '경영실적', '영업의 개황'], suffix: 'dart_06_경영사항', label: '주요경영사항', captureMode: 'tables' },
   ],
   semi: [
     { treeKeywords: ['연결 재무상태표', '재무상태표'], tableKeywords: ['자산총계', '유동자산'], suffix: 'dart_semi_재무상태표', label: '반기 재무상태표' },

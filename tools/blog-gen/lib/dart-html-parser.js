@@ -668,6 +668,181 @@ for (const type of Object.keys(TYPE_PARSERS)) {
   HTML_PARSE_CONFIG[type] = { parser: TYPE_PARSERS[type], formatSummary: SUMMARY_FORMATTERS[type] };
 }
 
+// ── 사업보고서 핵심 텍스트 파싱 ──────────────────────────────
+
+/**
+ * 사업보고서(annual) HTML에서 핵심 텍스트 데이터 추출
+ * @param {string} rcpNo - 사업보고서 접수번호
+ * @param {(msg: string) => void} onProgress
+ * @returns {Promise<object|null>}
+ */
+async function parseBusinessSummary(rcpNo, onProgress = () => {}) {
+  if (!rcpNo) return null;
+
+  const result = {
+    businessOverview: null,
+    salesData: null,
+    keyManagement: null,
+    marketShare: null,
+    dividend: null,
+  };
+
+  try {
+    const mainUrl = `${DART_BASE}/dsaf001/main.do?rcpNo=${rcpNo}`;
+    onProgress('사업보고서 텍스트 파싱: 메인 페이지 로드...');
+    const mainHtml = await fetchDartPage(mainUrl);
+    const nodes = extractTreeNodes(mainHtml);
+
+    if (nodes.length === 0) {
+      onProgress('사업보고서 트리 노드 없음');
+      return null;
+    }
+
+    // 트리 노드에서 키워드로 섹션 찾기
+    function findNode(...keywords) {
+      return nodes.find((n) =>
+        keywords.some((kw) => n.text.includes(kw))
+      );
+    }
+
+    // 섹션 HTML → 전체 텍스트 추출
+    async function fetchSectionText(node) {
+      const url = buildViewerUrl(node);
+      const html = await fetchDartPage(url);
+      const $ = cheerio.load(html);
+      $('script, style, head').remove();
+      return $('body').text().replace(/\s+/g, ' ').trim();
+    }
+
+    // 섹션 HTML → 테이블을 마크다운으로 변환
+    async function fetchSectionTables(node) {
+      const url = buildViewerUrl(node);
+      const html = await fetchDartPage(url);
+      const rows = extractAllRows(html);
+      if (rows.length < 3) return null;
+
+      // 2줄 이하 테이블 제외: 테이블 단위로 그룹핑
+      const $ = cheerio.load(html);
+      const tables = [];
+      $('table, TABLE').each((_, table) => {
+        const tableRows = [];
+        $(table).find('tr, TR').each((__, row) => {
+          const cells = [];
+          $(row).find('td, TD, th, TH').each((___, cell) => {
+            cells.push($(cell).text().replace(/\s+/g, ' ').trim());
+          });
+          if (cells.some((c) => c.length > 0)) tableRows.push(cells);
+        });
+        if (tableRows.length >= 3) tables.push(tableRows);
+      });
+
+      if (tables.length === 0) return null;
+
+      // 마크다운 테이블로 변환 (최대 3개 테이블)
+      const mdParts = [];
+      for (const tbl of tables.slice(0, 3)) {
+        const maxCols = Math.max(...tbl.map((r) => r.length));
+        const mdRows = tbl.map(
+          (r) => '| ' + Array.from({ length: maxCols }, (_, i) => r[i] || '').join(' | ') + ' |'
+        );
+        // 첫 행 뒤에 구분선
+        if (mdRows.length > 1) {
+          mdRows.splice(1, 0, '| ' + Array(maxCols).fill('---').join(' | ') + ' |');
+        }
+        mdParts.push(mdRows.join('\n'));
+      }
+      return mdParts.join('\n\n');
+    }
+
+    // a) 사업 개요 + 시장점유율
+    try {
+      const bizNode = findNode('사업의 개요', '사업의 내용', '사업개요');
+      if (bizNode) {
+        onProgress('사업보고서: 사업 개요 파싱...');
+        const text = await fetchSectionText(bizNode);
+        if (text.length > 50) {
+          result.businessOverview = text.slice(0, 500);
+
+          // 시장점유율 문단 추출
+          const sharePatterns = ['시장점유율', '점유율', '경쟁'];
+          const sentences = text.split(/[.。]\s*/);
+          const shareHits = sentences.filter((s) =>
+            sharePatterns.some((p) => s.includes(p))
+          );
+          if (shareHits.length > 0) {
+            result.marketShare = shareHits.slice(0, 3).join('. ').slice(0, 500);
+          }
+        }
+        await sleep(300);
+      }
+    } catch (err) {
+      onProgress(`사업 개요 파싱 실패: ${err.message}`);
+    }
+
+    // b) 매출 및 수주상황
+    try {
+      const salesNode = findNode('매출 및 수주', '매출에 관한', '매출실적', '매출현황');
+      if (salesNode) {
+        onProgress('사업보고서: 매출/수주 파싱...');
+        const md = await fetchSectionTables(salesNode);
+        if (md) result.salesData = md;
+        await sleep(300);
+      }
+    } catch (err) {
+      onProgress(`매출/수주 파싱 실패: ${err.message}`);
+    }
+
+    // c) 주요 경영사항
+    try {
+      const mgmtNode = findNode('주요 경영사항', '영업의 개황', '경영실적');
+      if (mgmtNode) {
+        onProgress('사업보고서: 경영사항 파싱...');
+        const text = await fetchSectionText(mgmtNode);
+        if (text.length > 50) {
+          result.keyManagement = text.slice(0, 300);
+        }
+        await sleep(300);
+      }
+    } catch (err) {
+      onProgress(`경영사항 파싱 실패: ${err.message}`);
+    }
+
+    // d) 배당 — 트리에서 "배당" 섹션 찾아서 parseDividend 재사용
+    try {
+      const divNode = findNode('배당에 관한', '배당금', '주당배당');
+      if (divNode) {
+        onProgress('사업보고서: 배당 파싱...');
+        const url = buildViewerUrl(divNode);
+        const html = await fetchDartPage(url);
+        const rows = extractAllRows(html);
+        const divData = parseDividend(rows);
+        if (divData) {
+          result.dividend = {
+            perShare: divData['1주당배당금'] || null,
+            yieldRate: divData['배당수익률'] || null,
+            totalAmount: divData['배당금총액'] ? formatBillion(divData['배당금총액']) : null,
+            recordDate: divData['배당기준일'] || null,
+          };
+        }
+      }
+    } catch (err) {
+      onProgress(`배당 파싱 실패: ${err.message}`);
+    }
+
+    const hasData = Object.values(result).some((v) => v !== null);
+    if (hasData) {
+      onProgress('사업보고서 텍스트 파싱 완료');
+      return result;
+    }
+
+    onProgress('사업보고서에서 추출 가능한 데이터 없음');
+    return null;
+  } catch (err) {
+    onProgress(`사업보고서 파싱 오류: ${err.message}`);
+    return null;
+  }
+}
+
 // ── 오케스트레이터 ──────────────────────────────────────────
 
 async function enrichHitFromHtml(hit, onProgress = () => {}) {
@@ -731,6 +906,7 @@ async function enrichHitFromHtml(hit, onProgress = () => {}) {
 
 module.exports = {
   enrichHitFromHtml,
+  parseBusinessSummary,
   HTML_PARSE_CONFIG,
   fetchDartPage,
   extractTreeNodes,
