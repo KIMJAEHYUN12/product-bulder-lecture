@@ -60,6 +60,9 @@ const REPORT_SECTIONS = {
     { treeKeywords: ['매출', '수주'], tableKeywords: ['매출액', '매출'], suffix: 'dart_01_매출실적', label: '매출실적' },
     { treeKeywords: ['연결 재무상태표', '재무상태표'], tableKeywords: ['자산총계', '유동자산'], suffix: 'dart_02_연결재무상태표', label: '재무상태표' },
     { treeKeywords: ['연결 포괄손익', '포괄손익계산서', '손익계산서'], tableKeywords: ['매출액', '영업이익', '당기순이익'], suffix: 'dart_03_포괄손익계산서', label: '손익계산서' },
+    { treeKeywords: ['수주상황', '수주현황', '수주계약'], suffix: 'dart_04_수주현황', label: '수주현황', captureMode: 'tables' },
+    { treeKeywords: ['사업의 내용', '사업의내용', '사업개요'], suffix: 'dart_05_사업내용', label: '사업내용', captureMode: 'tables' },
+    { treeKeywords: ['주요 경영사항', '경영실적', '영업의 개황'], suffix: 'dart_06_경영사항', label: '주요경영사항', captureMode: 'tables' },
   ],
   semi: [
     { treeKeywords: ['연결 재무상태표', '재무상태표'], tableKeywords: ['자산총계', '유동자산'], suffix: 'dart_semi_재무상태표', label: '반기 재무상태표' },
@@ -102,22 +105,6 @@ const GENERAL_TREE_CONFIG = {
     fallback: true,
   },
 };
-
-// 사업보고서 추가 캡처 섹션 (매출/수주)
-const REPORT_EXTRA_SECTIONS = [
-  {
-    id: 'sales',
-    treeKeywords: ['매출 및 수주상황', '매출에 관한 사항', '매출실적'],
-    filenameSuffix: 'sales',
-    captureMode: 'tables',
-  },
-  {
-    id: 'orders',
-    treeKeywords: ['수주상황', '수주현황'],
-    filenameSuffix: 'orders',
-    captureMode: 'tables',
-  },
-];
 
 // ── 공시 선별 ─────────────────────────────────
 
@@ -178,7 +165,13 @@ async function selectDisclosures(stockCode) {
     }
 
     ranked.sort((a, b) => a.rank - b.rank);
-    const selected = ranked.slice(0, 5);
+
+    // annual(사업보고서) 1건 보장 + 나머지 최대 6건
+    const annual = ranked.find((d) => d.type === 'annual');
+    const others = ranked.filter((d) => d.type !== 'annual');
+    const maxOthers = annual ? 6 : 7;
+    const selected = [...(annual ? [annual] : []), ...others.slice(0, maxOthers)];
+
     console.log(`  DART 공시 ${data.list.length}건 중 ${selected.length}건 선별`);
     for (const d of selected) {
       console.log(`    [${d.type}] ${d.title} (${d.date})`);
@@ -341,10 +334,10 @@ async function captureTablesFromFrame(browser, frameUrl, stockCode, suffix, outp
 
     if (tableCount <= 3) {
       // 전체 프레임 1장 캡처
-      const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_dart_${suffix}.png`);
+      const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_${suffix}.png`);
       await capturePage.screenshot({ path: filePath, fullPage: true });
       if (validateCapture(filePath, suffix)) {
-        results.push(`images/dart/${stockCode}_dart_${suffix}.png`);
+        results.push(`images/dart/${stockCode}_${suffix}.png`);
       }
     } else {
       // 상위 3개 테이블 개별 캡처
@@ -361,14 +354,14 @@ async function captureTablesFromFrame(browser, frameUrl, stockCode, suffix, outp
         const el = handle.asElement();
         if (!el) continue;
         const paddedIdx = String(idx).padStart(2, '0');
-        const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_dart_${suffix}_${paddedIdx}.png`);
+        const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_${suffix}_${paddedIdx}.png`);
 
         await capturePage.evaluate((e) => e.scrollIntoView({ block: 'start', behavior: 'instant' }), el);
         await delay(300);
         await el.screenshot({ path: filePath });
 
         if (validateCapture(filePath, `${suffix}_${paddedIdx}`)) {
-          results.push(`images/dart/${stockCode}_dart_${suffix}_${paddedIdx}.png`);
+          results.push(`images/dart/${stockCode}_${suffix}_${paddedIdx}.png`);
         }
         idx++;
       }
@@ -513,66 +506,26 @@ async function captureReportSections(page, browser, stockCode, outputDir, disc) 
         continue;
       }
 
-      const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_${section.suffix}.png`);
+      // captureMode: 'tables' → 복수 테이블 캡처
+      if (section.captureMode === 'tables') {
+        const files = await captureTablesFromFrame(browser, frameUrl, stockCode, section.suffix, outputDir);
+        results.push(...files);
+      } else {
+        const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_${section.suffix}.png`);
 
-      // 새 탭에서 frame URL 직접 열어 캡처 (iframe 클리핑 회피)
-      const ok = await captureFromDirectUrl(browser, frameUrl, filePath, {
-        keywords: section.tableKeywords,
-        minRows: 3,
-        withHeading: true,
-      });
+        // 새 탭에서 frame URL 직접 열어 캡처 (iframe 클리핑 회피)
+        const ok = await captureFromDirectUrl(browser, frameUrl, filePath, {
+          keywords: section.tableKeywords,
+          minRows: 3,
+          withHeading: true,
+        });
 
-      if (ok && validateCapture(filePath, section.label)) {
-        results.push(`images/dart/${stockCode}_${section.suffix}.png`);
+        if (ok && validateCapture(filePath, section.label)) {
+          results.push(`images/dart/${stockCode}_${section.suffix}.png`);
+        }
       }
     } catch (err) {
       console.log(`    ${section.label} 캡처 실패: ${err.message}`);
-    }
-  }
-
-  // ── 추가 섹션 (매출/수주) — annual에만 적용 ──
-  if (disc.type === 'annual') {
-    for (const extra of REPORT_EXTRA_SECTIONS) {
-      try {
-        let clicked = null;
-        for (const kw of extra.treeKeywords) {
-          clicked = await clickTreeNode(page, kw);
-          if (clicked) break;
-        }
-
-        if (!clicked) {
-          console.log(`    목차에서 "${extra.id}" 찾지 못함, 스킵`);
-          continue;
-        }
-
-        console.log(`    "${clicked}" 클릭 (${extra.id}), 콘텐츠 로딩 대기...`);
-        await delay(3000);
-
-        const contentFrame = await findContentFrame(page);
-        if (!contentFrame) {
-          console.log(`    콘텐츠 프레임 없음, 스킵`);
-          continue;
-        }
-
-        const frameUrl = contentFrame.url();
-        if (!frameUrl || frameUrl === 'about:blank') {
-          console.log(`    프레임 URL 없음, 스킵`);
-          continue;
-        }
-
-        if (extra.captureMode === 'tables') {
-          const files = await captureTablesFromFrame(browser, frameUrl, stockCode, extra.filenameSuffix, outputDir);
-          results.push(...files);
-        } else {
-          const filePath = path.join(outputDir, 'images', 'dart', `${stockCode}_dart_${extra.filenameSuffix}.png`);
-          const ok = await captureFromDirectUrl(browser, frameUrl, filePath, { minRows: 3 });
-          if (ok && validateCapture(filePath, extra.id)) {
-            results.push(`images/dart/${stockCode}_dart_${extra.filenameSuffix}.png`);
-          }
-        }
-      } catch (err) {
-        console.log(`    ${extra.id} 캡처 실패: ${err.message}`);
-      }
     }
   }
 

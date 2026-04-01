@@ -307,10 +307,12 @@ function buildUserPrompt(data, dart, finance, images) {
       sections.push('아래 DART 이미지를 본문의 해당 분석 섹션에 📸 마커로 반드시 삽입할 것:');
       for (const f of dartImages) {
         const fname = f.split('/').pop();
-        if (fname.includes('sales')) {
-          sections.push(`📸 여기에 이미지 삽입: ${f} → "매출 및 수주상황" 또는 "사업 구조" 섹션에 삽입`);
-        } else if (fname.includes('orders')) {
-          sections.push(`📸 여기에 이미지 삽입: ${f} → "수주상황" 또는 "매출 파이프라인" 섹션에 삽입`);
+        if (fname.includes('수주현황')) {
+          sections.push(`📸 여기에 이미지 삽입: ${f} → "수주현황" 또는 "매출 파이프라인" 섹션에 삽입`);
+        } else if (fname.includes('사업내용')) {
+          sections.push(`📸 여기에 이미지 삽입: ${f} → "사업의 내용" 또는 "사업 구조" 섹션에 삽입`);
+        } else if (fname.includes('경영사항')) {
+          sections.push(`📸 여기에 이미지 삽입: ${f} → "주요 경영사항" 또는 "경영 실적" 섹션에 삽입`);
         } else if (fname.includes('매출실적')) {
           sections.push(`📸 여기에 이미지 삽입: ${f} → "매출실적" 또는 "실적 분석" 섹션에 삽입`);
         } else if (fname.includes('재무상태표')) {
