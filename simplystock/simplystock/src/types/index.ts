@@ -199,6 +199,15 @@ export interface PerBandData {
   }[];
   pbrBandReliability?: "high" | "low";
 
+  // 증권사 컨센서스
+  analystData?: {
+    targetMeanPrice: number | null;
+    targetHighPrice: number | null;
+    targetLowPrice: number | null;
+    recommendationMean: number | null;
+    numberOfAnalystOpinions: number | null;
+  } | null;
+
   // 데이터 출처
   dataSources?: {
     price: string;

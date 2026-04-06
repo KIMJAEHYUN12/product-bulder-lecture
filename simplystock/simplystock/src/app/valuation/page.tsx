@@ -379,6 +379,94 @@ export default function ValuationPage() {
         {/* 결과 */}
         {!loading && !error && data && !showShareGate && (
           <div className="mt-4 space-y-4">
+            {/* 증권사 컨센서스 */}
+            {data.analystData && data.analystData.numberOfAnalystOpinions && data.analystData.numberOfAnalystOpinions > 0 && (() => {
+              const ad = data.analystData;
+              const currentPrice = data.bandChart[data.bandChart.length - 1].close;
+              const targetMean = ad.targetMeanPrice;
+              const gap = targetMean != null ? ((targetMean - currentPrice) / currentPrice) * 100 : null;
+              const recMean = ad.recommendationMean;
+              const recLabel = recMean == null ? "-"
+                : recMean <= 1.5 ? "적극 매수"
+                : recMean <= 2.5 ? "매수"
+                : recMean <= 3.5 ? "중립"
+                : recMean <= 4.5 ? "비중축소"
+                : "매도";
+              const recColor = recMean == null ? "text-[var(--text-muted)]"
+                : recMean <= 1.5 ? "text-emerald-400"
+                : recMean <= 2.5 ? "text-sky-400"
+                : recMean <= 3.5 ? "text-[var(--text-muted)]"
+                : recMean <= 4.5 ? "text-amber-400"
+                : "text-red-400";
+
+              // 범위 바 계산
+              const lo = ad.targetLowPrice;
+              const hi = ad.targetHighPrice;
+              let barNode: React.ReactNode = null;
+              if (lo != null && hi != null && hi > lo) {
+                const rangeMin = Math.min(lo, currentPrice);
+                const rangeMax = Math.max(hi, currentPrice);
+                const span = rangeMax - rangeMin;
+                const barLeft = ((lo - rangeMin) / span) * 100;
+                const barRight = ((rangeMax - hi) / span) * 100;
+                const dotPos = ((currentPrice - rangeMin) / span) * 100;
+                barNode = (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between text-[10px] text-[var(--text-faint)] mb-1">
+                      <span>{fmtPrice(lo, data.currency)}</span>
+                      <span>{fmtPrice(hi, data.currency)}</span>
+                    </div>
+                    <div className="relative h-2">
+                      <div className="absolute inset-0 rounded-full bg-[var(--bg-primary)]" />
+                      <div
+                        className="absolute top-0 h-2 rounded-full bg-indigo-500/30"
+                        style={{ left: `${barLeft}%`, right: `${barRight}%` }}
+                      />
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-[var(--text-primary)] border-2 border-[var(--bg-overlay)]"
+                        style={{ left: `${dotPos}%`, transform: `translate(-50%, -50%)` }}
+                        title={`현재가: ${fmtPrice(currentPrice, data.currency)}`}
+                      />
+                    </div>
+                    <div className="mt-1 text-center text-[10px] text-[var(--text-faint)]">
+                      ● 현재가 {fmtPrice(currentPrice, data.currency)}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-overlay)] p-3">
+                  <h3 className="text-xs font-medium text-[var(--text-muted)]">
+                    증권사 컨센서스 ({ad.numberOfAnalystOpinions}명)
+                  </h3>
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <div>
+                      <span className="text-[10px] text-[var(--text-faint)]">목표주가</span>
+                      <span className="ml-1.5 text-sm font-bold">
+                        {targetMean != null ? fmtPrice(targetMean, data.currency) : "-"}
+                      </span>
+                    </div>
+                    {gap != null && (
+                      <span className={`text-xs font-medium ${gap >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {gap >= 0 ? "+" : ""}{gap.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  {barNode}
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-[10px] text-[var(--text-faint)]">추천 등급</span>
+                    <span className={`text-xs font-medium ${recColor}`}>
+                      {recLabel}{recMean != null ? ` (${recMean.toFixed(1)})` : ""}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[var(--text-faint)]">
+                    증권사 컨센서스는 참고용이며, 투자 판단의 근거로 사용할 수 없습니다.
+                  </p>
+                </div>
+              );
+            })()}
+
             {/* 탭 전환 */}
             <div className="flex gap-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-overlay)] p-1">
               <button

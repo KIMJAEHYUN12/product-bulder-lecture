@@ -116,6 +116,38 @@ async function clickPeriodButton(page, periodText) {
 }
 
 /**
+ * 회귀채널 단기/장기 윈도우 버튼 클릭
+ * groupLabel: "단기" 또는 "장기"
+ * value: "20", "30", "60", "OFF", "120", "250" 등
+ *
+ * DOM 구조: <span>단기</span> <button>20</button> <button>30</button> ...
+ *           <div/> <span>장기</span> <button>OFF</button> <button>60</button> ...
+ * 같은 부모의 자식 노드를 순회하여 groupLabel span 이후의 button 중 value 매칭
+ */
+async function clickRegressionButton(page, groupLabel, value) {
+  return page.evaluate((group, val) => {
+    const spans = document.querySelectorAll('span');
+    for (const span of spans) {
+      if (span.textContent.trim() !== group) continue;
+      const parent = span.parentElement;
+      if (!parent) continue;
+      const children = Array.from(parent.children);
+      const spanIdx = children.indexOf(span);
+      // span 이후의 형제들만 탐색 (다음 구분선 <div> 또는 다음 <span>까지)
+      for (let i = spanIdx + 1; i < children.length; i++) {
+        const el = children[i];
+        if (el.tagName === 'DIV' || (el.tagName === 'SPAN' && el !== span)) break;
+        if (el.tagName === 'BUTTON' && el.textContent.trim() === val) {
+          el.click();
+          return true;
+        }
+      }
+    }
+    return false;
+  }, groupLabel, value);
+}
+
+/**
  * 수급 차트 모드 전환 ("합산" / "주체별")
  */
 async function clickSupplyTab(page, tabText) {
@@ -342,6 +374,13 @@ async function captureSimplyStock(stockCode, outputDir, onProgress = () => {}) {
     await new Promise(r => setTimeout(r, 500));
     await clickPeriodButton(page, sel.PERIOD_6M);
     await waitForChartRender(page);
+
+    // 일봉 회귀채널 기간 변경: 단기 20 + 장기 60
+    await clickRegressionButton(page, '단기', '20');
+    await new Promise(r => setTimeout(r, 300));
+    await clickRegressionButton(page, '장기', '60');
+    await waitForChartRender(page);
+
     const dailyPath = path.join(imagesDir, '03_일봉_회귀채널_수급.png');
     await captureChartOnly(page, dailyPath);
     images.push('images/03_일봉_회귀채널_수급.png');

@@ -1513,7 +1513,7 @@ exports.chartGame = onRequest({ cors: true }, async (req, res) => {
 const krStocksRaw = require("./data/krStocks.json");
 const sectorOverrides = require("./data/sectorOverrides.json");
 const KR_STOCK_MAP = krStocksRaw
-  .filter((r) => /^\d+\./.test(r.s))  // 코드에 영문자 섞인 임시코드 ETF 제외 (006800.KS 같은 정상 종목 유지)
+  .filter((r) => /^\d{6}\./.test(r.s) || r.m === "P" || r.m === "Q")  // 6자리 숫자코드 + KOSPI/KOSDAQ 영숫자 혼합코드 포함, ETF 임시코드 제외
   .map((r) => ({
     symbol: r.s,
     name: r.n,
@@ -2890,6 +2890,154 @@ exports.bsSignalScheduler = onSchedule(
   }
 );
 
+// ── SmartMoney Scanner: 급락 + 스마트머니 유입 패턴 감지 ──────
+
+async function performSmartMoneyScan() {
+  // Phase 0: 종목 풀 구성 (bsSignalScan과 동일)
+  const symbolMap = new Map();
+  for (const s of SEED_SYMBOLS) symbolMap.set(s.symbol, s.name);
+  const kospiStocks = await fetchNaverTopStocks(0, 400);
+  for (const s of kospiStocks) {
+    if (!symbolMap.has(s.symbol)) symbolMap.set(s.symbol, s.name);
+  }
+  const kosdaqStocks = await fetchNaverTopStocks(1, 300);
+  for (const s of kosdaqStocks) {
+    if (!symbolMap.has(s.symbol)) symbolMap.set(s.symbol, s.name);
+  }
+  const pool = Array.from(symbolMap.entries()).map(([symbol, name]) => ({ symbol, name }));
+  console.log(`[smart-money] 풀 ${pool.length}개 구성 완료`);
+
+  // Phase 1: 빠른 필터 — 전일 등락률 ≤ -8% AND 거래량 배율 ≥ 2.0
+  const BATCH = 25;
+  const phase1 = [];
+  for (let i = 0; i < pool.length; i += BATCH) {
+    const batch = pool.slice(i, i + BATCH);
+    const batchResults = await Promise.allSettled(
+      batch.map(async (sym) => {
+        const candles = await fetchYahoo3mo(sym.symbol);
+        if (!candles || candles.length < 22) return null; // 20일 평균 계산에 최소 22개 필요
+        const last = candles[candles.length - 1];
+        const prev = candles[candles.length - 2];
+        if (!prev || prev.close <= 0) return null;
+        const changePct = ((last.close - prev.close) / prev.close) * 100;
+        if (changePct > -8) return null; // 조건 1: ≤ -8%
+        // 20일 평균 거래량
+        const volSlice = candles.slice(-22, -1); // 전일까지 최근 21개 중 20개
+        const avgVol = volSlice.reduce((s, c) => s + c.volume, 0) / volSlice.length;
+        const volumeRatio = avgVol > 0 ? last.volume / avgVol : 0;
+        if (volumeRatio < 2.0) return null; // 조건 3: ≥ 2.0
+        return {
+          symbol: sym.symbol,
+          name: sym.name,
+          changePct: Math.round(changePct * 100) / 100,
+          volumeRatio: Math.round(volumeRatio * 100) / 100,
+        };
+      })
+    );
+    for (const r of batchResults) {
+      if (r.status === "fulfilled" && r.value) phase1.push(r.value);
+    }
+  }
+  console.log(`[smart-money] Phase1 통과: ${phase1.length}건`);
+
+  // Phase 2: 수급 확인 — 외인 OR 기관 순매수 > 0
+  const phase2 = [];
+  for (const item of phase1) {
+    try {
+      const trend = await fetchInvestorTrendInternal(item.symbol, 5);
+      if (!trend || !trend.daily || trend.daily.length === 0) continue;
+      const latest = trend.daily[trend.daily.length - 1];
+      const foreignNet = latest.foreign || 0;
+      const institutionNet = latest.institution || 0;
+      if (foreignNet <= 0 && institutionNet <= 0) continue; // 조건 2
+      phase2.push({ ...item, foreignNet, institutionNet });
+    } catch {
+      continue;
+    }
+  }
+  console.log(`[smart-money] Phase2 통과: ${phase2.length}건`);
+
+  // Phase 3: PBR 밴드 위치 확인 — ≤ 30% (캐시 없으면 스킵)
+  const results = [];
+  for (const item of phase2) {
+    let pbrPosition = null;
+    try {
+      const code = item.symbol.replace(/\.\w+$/, "");
+      const cacheDoc = await db.doc(`cache/per_band_v3_${code}`).get();
+      if (cacheDoc.exists) {
+        const cached = cacheDoc.data();
+        if (cached.data && cached.data.pbrPosition != null) {
+          pbrPosition = cached.data.pbrPosition;
+          if (pbrPosition > 30) continue; // 조건 4: ≤ 30%
+        }
+      }
+    } catch {}
+    results.push({ ...item, pbrPosition });
+  }
+
+  // 등락률 오름차순 (가장 크게 떨어진 종목 먼저)
+  results.sort((a, b) => a.changePct - b.changePct);
+  console.log(`[smart-money] 최종 결과: ${results.length}건`);
+
+  const response = {
+    scannedAt: new Date().toISOString(),
+    totalScanned: pool.length,
+    results,
+  };
+
+  try {
+    await db.doc("cache/smart_money_scan").set({ data: response, fetchedAt: Date.now() });
+  } catch (e) {
+    console.warn("smart-money 캐시 저장 실패:", e.message);
+  }
+
+  return response;
+}
+
+exports.smartMoneyScanner = onRequest(
+  { cors: true, timeoutSeconds: 300, region: "us-central1", memory: "512MiB" },
+  async (req, res) => {
+    if (req.method !== "GET") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+    try {
+      const cacheDoc = await db.doc("cache/smart_money_scan").get();
+      if (cacheDoc.exists) {
+        const cached = cacheDoc.data();
+        if (cached.data && cached.fetchedAt && Date.now() - cached.fetchedAt < 6 * 60 * 60 * 1000) {
+          res.set("Cache-Control", "public, max-age=300, s-maxage=300");
+          res.json(cached.data);
+          return;
+        }
+      }
+      const response = await performSmartMoneyScan();
+      res.set("Cache-Control", "public, max-age=300, s-maxage=300");
+      res.json(response);
+    } catch (err) {
+      console.error("smartMoneyScanner 오류:", err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// ── SmartMoney 스케줄러: 평일 17:00 KST (08:00 UTC) ──
+exports.smartMoneyScheduler = onSchedule(
+  {
+    schedule: "0 8 * * 1-5",
+    timeZone: "UTC",
+    region: "us-central1",
+    memory: "512MiB",
+    timeoutSeconds: 300,
+    retryCount: 0,
+  },
+  async () => {
+    console.log("[smart-money-scheduler] 스케줄 스캔 시작");
+    const result = await performSmartMoneyScan();
+    console.log(`[smart-money-scheduler] 완료: ${result.results.length}건`);
+  }
+);
+
 // ── SimplyStock Watchlist ──────────────────────────────────
 exports.ssWatchlist = onRequest(
   { cors: true, region: "us-central1" },
@@ -3243,8 +3391,8 @@ async function fetchYahooSummary(symbol) {
   if (cookie) headers.Cookie = cookie;
 
   const urls = [
-    `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics,earnings,assetProfile,earningsTrend${crumbParam}`,
-    `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics,earnings,assetProfile,earningsTrend${crumbParam}`,
+    `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics,earnings,assetProfile,earningsTrend,financialData${crumbParam}`,
+    `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics,earnings,assetProfile,earningsTrend,financialData${crumbParam}`,
   ];
   for (const url of urls) {
     try {
@@ -3267,6 +3415,8 @@ async function fetchYahooSummary(symbol) {
       const forwardEpsEstimate = currentYearTrend?.earningsEstimate?.avg?.raw ?? null;
       const forwardEpsYear = currentYearTrend?.endDate ? new Date(currentYearTrend.endDate).getFullYear() : null;
 
+      const fin = result.financialData || {};
+
       return {
         forwardPe: stats.forwardPE?.raw ?? stats.forwardPe?.raw ?? null,
         trailingPe: stats.trailingPE?.raw ?? null,
@@ -3279,10 +3429,77 @@ async function fetchYahooSummary(symbol) {
         industry: profile.industry || null,
         forwardEpsEstimate,
         forwardEpsYear,
+        analystData: {
+          targetMeanPrice: fin.targetMeanPrice?.raw ?? null,
+          targetHighPrice: fin.targetHighPrice?.raw ?? null,
+          targetLowPrice: fin.targetLowPrice?.raw ?? null,
+          recommendationMean: fin.recommendationMean?.raw ?? null,
+          numberOfAnalystOpinions: fin.numberOfAnalystOpinions?.raw ?? null,
+        },
       };
     } catch { /* try next */ }
   }
-  return { forwardPe: null, trailingPe: null, sharesOutstanding: null, yearlyEarnings: [], sector: null, industry: null, forwardEpsEstimate: null, forwardEpsYear: null };
+  return { forwardPe: null, trailingPe: null, sharesOutstanding: null, yearlyEarnings: [], sector: null, industry: null, forwardEpsEstimate: null, forwardEpsYear: null, analystData: null };
+}
+
+/** 네이버 금융에서 한국 종목 컨센서스(투자의견/목표주가/추정기관수) 조회 */
+async function fetchNaverConsensus(stockCode) {
+  try {
+    const r = await fetch(
+      `https://finance.naver.com/item/main.naver?code=${stockCode}`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(6000) },
+    );
+    if (!r.ok) return null;
+    const html = await r.text();
+
+    // 투자의견: <span class="f_up"><em>4.00</em>매수</span> ... <em>258,320</em>
+    const m = html.match(/투자의견[\s\S]*?<span class="f_up"><em>([\d.]+)<\/em>\S*?<\/span>[\s\S]*?<em>([\d,]+)<\/em>/);
+    if (!m) return null;
+
+    const opinion = parseFloat(m[1]); // 1~5 scale (5=적극매수, 1=매도) — 네이버 기준
+    const targetPrice = parseInt(m[2].replace(/,/g, ""), 10);
+    if (isNaN(opinion) || isNaN(targetPrice) || targetPrice <= 0) return null;
+
+    // 네이버 투자의견: 5=적극매수, 4=매수, 3=중립, 2=매도, 1=적극매도
+    // Yahoo 스케일(recommendationMean): 1=Strong Buy, 2=Buy, 3=Hold, 4=Underperform, 5=Sell
+    // 변환: yahoo = 6 - naver
+    const recommendationMean = Math.round((6 - opinion) * 100) / 100;
+
+    // 추정기관수: WiseReport cTB15 테이블 (best effort)
+    let numberOfAnalystOpinions = null;
+    try {
+      const wr = await fetch(
+        `https://navercomp.wisereport.co.kr/v2/company/c1010001.aspx?cmp_cd=${stockCode}&cn=`,
+        { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(5000) },
+      );
+      if (wr.ok) {
+        const wrHtml = await wr.text();
+        const tIdx = wrHtml.indexOf('id="cTB15"');
+        if (tIdx >= 0) {
+          const tableEnd = wrHtml.indexOf("</table>", tIdx);
+          const table = wrHtml.substring(tIdx, tableEnd);
+          const tds = [...table.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((x) =>
+            x[1].replace(/<[^>]+>/g, "").trim(),
+          );
+          // td[5] = 추정기관수
+          if (tds[5]) {
+            const n = parseInt(tds[5], 10);
+            if (!isNaN(n) && n > 0) numberOfAnalystOpinions = n;
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
+    return {
+      targetMeanPrice: targetPrice,
+      targetHighPrice: null,
+      targetLowPrice: null,
+      recommendationMean,
+      numberOfAnalystOpinions,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Yahoo 차트에서 장기 가격 히스토리 조회 */
@@ -3769,6 +3986,15 @@ async function fetchPerBandInternal(rawSymbol, dartKey, { forceRefresh = false }
     pbrResult = calculatePbrBand(priceResult.prices, equityHistory, sharesOutstanding);
   }
 
+  // 증권사 컨센서스: Yahoo에 있으면 사용, 없으면 한국 종목은 네이버에서 조회
+  let analystData = null;
+  const ya = yahooData.analystData;
+  if (ya && ya.numberOfAnalystOpinions && ya.numberOfAnalystOpinions > 0) {
+    analystData = ya;
+  } else if (isKorean) {
+    analystData = await fetchNaverConsensus(stockCode);
+  }
+
   const response = {
     symbol: stockCode,
     name: priceResult.name,
@@ -3785,6 +4011,7 @@ async function fetchPerBandInternal(rawSymbol, dartKey, { forceRefresh = false }
     bandReliability: bandResult.bandReliability,
     sector: yahooData.sector,
     industry: yahooData.industry,
+    ...(analystData && { analystData }),
     ...(forwardResult && {
       forwardPerBands: forwardResult.forwardPerBands,
       forwardBandChart: forwardResult.forwardBandChart,
